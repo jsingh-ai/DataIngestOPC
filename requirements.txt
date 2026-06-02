@@ -1,0 +1,28 @@
+# OPC Platform Python dependencies
+#
+# Install into a fresh virtualenv:
+#   python -m venv .venv
+#   .venv/bin/pip install -r requirements.txt
+#
+# This file covers the API, collector, scripts, and local test tooling.
+# Frontend dependencies are managed separately with npm in frontend/package.json.
+
+alembic>=1.13.1
+asyncua>=1.1.5
+certifi>=2024.0.0
+cryptography>=42.0.0
+fastapi==0.115.12
+httpx==0.27.2
+mypy>=1.10.0
+mysql-connector-python>=9.0.0
+psutil>=5.9.8
+pydantic-settings>=2.2.1
+PyJWT>=2.8.0
+pymysql>=1.1.1
+pytest>=8.2.0
+pytest-asyncio>=0.23.6
+python-multipart>=0.0.20
+ruff>=0.4.8
+sqlalchemy>=2.0.29
+starlette>=0.46,<0.47
+uvicorn>=0.30.0

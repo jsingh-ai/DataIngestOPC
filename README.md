@@ -86,6 +86,14 @@ What the collector does:
 - Docker and Docker Compose for local MySQL
 - Access to Azure MySQL for production
 
+Install the Python dependencies into a fresh virtualenv with:
+
+```bash
+cd /home/jsingh/projects/DataIngestOPC/opc-platform
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
 ## Local Development Quick Start
 
 Use this order:
