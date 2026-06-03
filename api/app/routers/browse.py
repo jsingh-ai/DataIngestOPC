@@ -68,6 +68,9 @@ def add_tags_from_cache(
         if cache_row is None or cache_row.machine_id != machine_id:
             skipped_ids.append(item.cache_id)
             continue
+        if not cache_row.is_variable:
+            skipped_ids.append(item.cache_id)
+            continue
         duplicate = db.execute(
             select(TagDefinition).where(
                 TagDefinition.machine_id == machine_id, TagDefinition.opc_node_id == cache_row.opc_node_id

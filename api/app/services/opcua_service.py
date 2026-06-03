@@ -28,7 +28,14 @@ class BrowseNode:
 
 class OpcClientProtocol(Protocol):
     async def test_connection(self, machine: Machine) -> tuple[bool, str]: ...
-    async def browse_tags(self, machine: Machine, max_depth: int, max_nodes: int) -> list[BrowseNode]: ...
+    async def browse_tags(
+        self,
+        machine: Machine,
+        max_depth: int,
+        max_nodes: int,
+        root_node_id: str | None = None,
+        root_label: str | None = None,
+    ) -> list[BrowseNode]: ...
 
 
 class MockOpcClient:
@@ -45,19 +52,56 @@ class MockOpcClient:
             return False, "Machine is offline in mock OPC mode"
         return True, "Mock OPC connection successful"
 
-    async def browse_tags(self, machine: Machine, max_depth: int, max_nodes: int) -> list[BrowseNode]:
+    async def browse_tags(
+        self,
+        machine: Machine,
+        max_depth: int,
+        max_nodes: int,
+        root_node_id: str | None = None,
+        root_label: str | None = None,
+    ) -> list[BrowseNode]:
         if machine.machine_code in self.offline_codes:
             raise TimeoutError("Machine is offline in mock OPC mode")
         if self.settings.mock_opc_slow_ms:
             await asyncio.sleep(self.settings.mock_opc_slow_ms / 1000)
-        count = min(self.settings.mock_opc_tag_count, max_nodes)
         nodes: list[BrowseNode] = []
-        for index in range(count):
-            folder = f"Area{index % max(1, min(max_depth, 8))}"
-            browse_path = f"Root/Objects/{folder}/Tag{index}"
+        root_prefix = root_label or "Root / Objects"
+        if root_node_id is None:
+            folder_names = ["PLC", "Modules", "Default", "Status", "Parameters"]
+            for index, folder_name in enumerate(folder_names[: max_nodes]):
+                nodes.append(
+                    BrowseNode(
+                        opc_node_id=f"ns=2;s={machine.machine_code}.{folder_name}",
+                        browse_path=f"{root_prefix}/{folder_name}",
+                        display_name=folder_name,
+                        browse_name=folder_name,
+                        node_class="Object",
+                        data_type=None,
+                        is_variable=False,
+                    )
+                )
+            return nodes
+
+        folder_names = [f"Folder {index}" for index in range(1, min(5, max_nodes // 3 + 1))]
+        variable_count = max(0, min(self.settings.mock_opc_tag_count, max_nodes) - len(folder_names))
+        for index, folder_name in enumerate(folder_names):
             nodes.append(
                 BrowseNode(
-                    opc_node_id=f"ns=2;s={machine.machine_code}.Tag{index}",
+                    opc_node_id=f"{root_node_id}.Group{index}",
+                    browse_path=f"{root_prefix}/{folder_name}",
+                    display_name=folder_name,
+                    browse_name=folder_name.replace(" ", ""),
+                    node_class="Object",
+                    data_type=None,
+                    is_variable=False,
+                )
+            )
+        for index in range(variable_count):
+            folder = f"Area{index % max(1, min(max_depth, 8))}"
+            browse_path = f"{root_prefix}/{folder}/Tag{index}"
+            nodes.append(
+                BrowseNode(
+                    opc_node_id=f"{root_node_id}.Tag{index}",
                     browse_path=browse_path,
                     display_name=f"Tag {index}",
                     browse_name=f"Tag{index}",
@@ -130,57 +174,59 @@ class AsyncUaOpcClient:
             except Exception:
                 pass
 
-    async def browse_tags(self, machine: Machine, max_depth: int, max_nodes: int) -> list[BrowseNode]:
+    async def browse_tags(
+        self,
+        machine: Machine,
+        max_depth: int,
+        max_nodes: int,
+        root_node_id: str | None = None,
+        root_label: str | None = None,
+    ) -> list[BrowseNode]:
         client = await self._configure_client(machine, self.settings.opc_browse_timeout_seconds)
         discovered: list[BrowseNode] = []
         await asyncio.wait_for(client.connect(), timeout=self.settings.opc_connect_timeout_seconds)
         try:
-            queue: list[tuple[object, str, int]] = [(client.nodes.objects, "Root/Objects", 0)]
-            while queue and len(discovered) < max_nodes:
-                node, path, depth = queue.pop(0)
-                children = await asyncio.wait_for(
-                    getattr(node, "get_children")(), timeout=self.settings.opc_browse_timeout_seconds
-                )
-                for child in children:
-                    if len(discovered) >= max_nodes:
-                        break
+            if root_node_id:
+                start_node = client.get_node(root_node_id)
+                start_path = root_label or root_node_id
+            else:
+                start_node = client.nodes.objects
+                start_path = root_label or "Root/Objects"
+            children = await asyncio.wait_for(
+                getattr(start_node, "get_children")(), timeout=self.settings.opc_browse_timeout_seconds
+            )
+            for child in children:
+                if len(discovered) >= max_nodes:
+                    break
+                try:
+                    browse_name = await asyncio.wait_for(child.read_browse_name(), timeout=self.settings.opc_browse_timeout_seconds)
+                    display_name = await asyncio.wait_for(child.read_display_name(), timeout=self.settings.opc_browse_timeout_seconds)
+                    node_class = (await asyncio.wait_for(child.read_node_class(), timeout=self.settings.opc_browse_timeout_seconds)).name
+                except Exception:
+                    continue
+                child_path = f"{start_path}/{browse_name.Name}"
+                is_variable = node_class == "Variable"
+                data_type = None
+                if is_variable:
                     try:
-                        browse_name = await asyncio.wait_for(
-                            child.read_browse_name(), timeout=self.settings.opc_browse_timeout_seconds
+                        variant = await asyncio.wait_for(
+                            child.read_data_type_as_variant_type(),
+                            timeout=self.settings.opc_browse_timeout_seconds,
                         )
-                        display_name = await asyncio.wait_for(
-                            child.read_display_name(), timeout=self.settings.opc_browse_timeout_seconds
-                        )
-                        node_class = (await asyncio.wait_for(
-                            child.read_node_class(), timeout=self.settings.opc_browse_timeout_seconds
-                        )).name
+                        data_type = getattr(variant, "name", str(variant))
                     except Exception:
-                        continue
-                    child_path = f"{path}/{browse_name.Name}"
-                    is_variable = node_class == "Variable"
-                    data_type = None
-                    if is_variable:
-                        try:
-                            variant = await asyncio.wait_for(
-                                child.read_data_type_as_variant_type(),
-                                timeout=self.settings.opc_browse_timeout_seconds,
-                            )
-                            data_type = getattr(variant, "name", str(variant))
-                        except Exception:
-                            data_type = None
-                    discovered.append(
-                        BrowseNode(
-                            opc_node_id=child.nodeid.to_string(),
-                            browse_path=child_path,
-                            display_name=display_name.Text,
-                            browse_name=browse_name.Name,
-                            node_class=node_class,
-                            data_type=data_type,
-                            is_variable=is_variable,
-                        )
+                        data_type = None
+                discovered.append(
+                    BrowseNode(
+                        opc_node_id=child.nodeid.to_string(),
+                        browse_path=child_path,
+                        display_name=display_name.Text,
+                        browse_name=browse_name.Name,
+                        node_class=node_class,
+                        data_type=data_type,
+                        is_variable=is_variable,
                     )
-                    if depth + 1 < max_depth and node_class in {"Object", "FolderType"}:
-                        queue.append((child, child_path, depth + 1))
+                )
         finally:
             try:
                 await client.disconnect()

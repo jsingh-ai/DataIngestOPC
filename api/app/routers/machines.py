@@ -278,6 +278,8 @@ async def browse_tags(
         machine,
         payload.max_depth or 6,
         payload.max_nodes or 5000,
+        payload.root_node_id,
+        payload.root_label,
     )
     tag_nodes = {
         row[0]

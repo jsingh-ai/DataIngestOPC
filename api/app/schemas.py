@@ -81,6 +81,8 @@ class ConnectionTestResponse(BaseModel):
 class BrowseRequest(BaseModel):
     max_depth: int | None = Field(default=None, ge=1, le=20)
     max_nodes: int | None = Field(default=None, ge=1, le=10000)
+    root_node_id: str | None = Field(default=None, max_length=512)
+    root_label: str | None = Field(default=None, max_length=255)
 
 
 class BrowseSummaryResponse(BaseModel):
