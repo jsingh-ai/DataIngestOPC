@@ -182,6 +182,134 @@ select {
   color: #8d1f1f;
 }
 
+.toast-stack {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10;
+}
+
+.toast {
+  width: fit-content;
+  max-width: min(100%, 640px);
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  box-shadow: 0 10px 30px rgba(18, 33, 26, 0.12);
+}
+
+.toast-success {
+  background: #e2f2e1;
+  border-color: #9dc79b;
+  color: #1a4b22;
+}
+
+.toast-error {
+  background: #fde8e8;
+  border-color: #e09b9b;
+  color: #7c1f1f;
+}
+
+.toast-info {
+  background: #e7eef7;
+  border-color: #a6bbd4;
+  color: #1c3f63;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 14, 12, 0.58);
+  display: grid;
+  place-items: center;
+  z-index: 40;
+  padding: 24px;
+}
+
+.modal-card {
+  width: min(680px, 100%);
+  border-radius: 22px;
+  background: rgba(250, 253, 249, 0.98);
+  border: 1px solid rgba(16, 35, 29, 0.12);
+  box-shadow: 0 30px 90px rgba(6, 12, 9, 0.32);
+  overflow: hidden;
+}
+
+.modal-success {
+  border-color: #9dc79b;
+}
+
+.modal-error {
+  border-color: #e09b9b;
+}
+
+.modal-header {
+  padding: 18px 20px;
+  background: linear-gradient(180deg, rgba(227, 236, 226, 0.98), rgba(248, 252, 247, 0.98));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-body {
+  padding: 20px;
+  display: grid;
+  gap: 16px;
+}
+
+.step-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+}
+
+.step-active {
+  color: #1c3f63;
+  font-weight: 600;
+}
+
+.step-done {
+  color: #1a4b22;
+}
+
+.step-error {
+  color: #7c1f1f;
+  font-weight: 600;
+}
+
+.modal-message {
+  padding: 14px 16px;
+  border-radius: 16px;
+  font-weight: 600;
+}
+
+.modal-message-running {
+  background: #e7eef7;
+  color: #1c3f63;
+}
+
+.modal-message-success {
+  background: #e2f2e1;
+  color: #1a4b22;
+}
+
+.modal-message-error {
+  background: #fde8e8;
+  color: #7c1f1f;
+}
+
+.modal-next {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #f2f6f1;
+  border: 1px solid rgba(16, 35, 29, 0.1);
+  color: #17312b;
+}
+
 .virtual-table {
   border: 1px solid rgba(16, 35, 29, 0.08);
   border-radius: 14px;

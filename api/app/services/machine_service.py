@@ -10,6 +10,23 @@ from app.schemas import MachineCreate, MachineUpdate
 from app.security import encrypt_secret
 
 
+def build_machine_from_payload(payload: MachineCreate) -> Machine:
+    return Machine(
+        machine_code=payload.machine_code,
+        display_name=payload.display_name,
+        ip_address=payload.ip_address,
+        port=payload.port,
+        opc_endpoint=payload.opc_endpoint,
+        security_policy=payload.security_policy,
+        security_mode=payload.security_mode,
+        opc_username=payload.opc_username,
+        opc_password_encrypted=encrypt_secret(payload.opc_password) if payload.opc_password else None,
+        enabled=payload.enabled,
+        status="draft",
+        notes=payload.notes,
+    )
+
+
 def build_machine_query(search: str | None) -> Select[tuple[Machine]]:
     query = select(Machine)
     if search:
@@ -25,21 +42,9 @@ def build_machine_query(search: str | None) -> Select[tuple[Machine]]:
     return query.order_by(Machine.machine_id.desc())
 
 
-def create_machine(db: Session, payload: MachineCreate, changed_by: str) -> Machine:
-    machine = Machine(
-        machine_code=payload.machine_code,
-        display_name=payload.display_name,
-        ip_address=payload.ip_address,
-        port=payload.port,
-        opc_endpoint=payload.opc_endpoint,
-        security_policy=payload.security_policy,
-        security_mode=payload.security_mode,
-        opc_username=payload.opc_username,
-        opc_password_encrypted=encrypt_secret(payload.opc_password) if payload.opc_password else None,
-        enabled=payload.enabled,
-        status="draft",
-        notes=payload.notes,
-    )
+def create_machine(db: Session, payload: MachineCreate, changed_by: str, *, status: str = "draft") -> Machine:
+    machine = build_machine_from_payload(payload)
+    machine.status = status
     db.add(machine)
     db.flush()
     db.add(

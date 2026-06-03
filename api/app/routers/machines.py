@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import threading
 from datetime import UTC, datetime
+from collections.abc import Coroutine
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -19,10 +22,40 @@ from app.schemas import (
     PaginatedResponse,
 )
 from app.services.command_service import enqueue_command
-from app.services.machine_service import build_machine_query, create_machine, machine_status_map, machine_tag_counts, update_machine
+from app.services.machine_service import (
+    build_machine_from_payload,
+    build_machine_query,
+    create_machine,
+    machine_status_map,
+    machine_tag_counts,
+    update_machine,
+)
 from app.services.opcua_service import get_opc_service
 
 router = APIRouter(prefix="/api/machines", tags=["machines"])
+
+
+def _run_coro_sync(coro: Coroutine[object, object, tuple[bool, str]]) -> tuple[bool, str]:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    result: list[tuple[bool, str]] = []
+    error: list[BaseException] = []
+
+    def _runner() -> None:
+        try:
+            result.append(asyncio.run(coro))
+        except BaseException as exc:  # pragma: no cover - thread handoff
+            error.append(exc)
+
+    thread = threading.Thread(target=_runner, daemon=True)
+    thread.start()
+    thread.join()
+    if error:
+        raise error[0]
+    return result[0]
 
 
 @router.get("", response_model=PaginatedResponse)
@@ -60,8 +93,26 @@ def create_machine_route(
     db: Session = Depends(get_db),
     user: str = Depends(get_current_user),
 ) -> MachineSummary:
-    machine = create_machine(db, payload, user)
-    return MachineSummary.model_validate({**machine.__dict__, "tag_count": 0, "online_status": "unknown"})
+    machine = build_machine_from_payload(payload)
+    success, message = _run_coro_sync(get_opc_service().test_connection(machine))
+    if not success:
+        raise HTTPException(status_code=400, detail=f"Machine connection test failed: {message}")
+    created = create_machine(db, payload, user, status="connection_tested")
+    return MachineSummary.model_validate({**created.__dict__, "tag_count": 0, "online_status": "unknown"})
+
+
+@router.post("/test-connection", response_model=ConnectionTestResponse)
+async def test_connection_preview(
+    payload: MachineCreate,
+    _: str = Depends(get_current_user),
+) -> ConnectionTestResponse:
+    machine = build_machine_from_payload(payload)
+    success, message = await get_opc_service().test_connection(machine)
+    return ConnectionTestResponse(
+        success=success,
+        message=message,
+        machine_status="connection_tested" if success else "error",
+    )
 
 
 @router.get("/{machine_id}", response_model=MachineSummary)

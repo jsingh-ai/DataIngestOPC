@@ -4,8 +4,8 @@ import { login, setToken } from "../api/client";
 
 export function LoginPage(): JSX.Element {
   const navigate = useNavigate();
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("admin123!");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -21,16 +21,31 @@ export function LoginPage(): JSX.Element {
 
   return (
     <div className="login-page">
-      <form className="panel login-panel" onSubmit={handleSubmit}>
+      <form className="panel login-panel" onSubmit={handleSubmit} autoComplete="off">
         <div className="brand-kicker">OPC UA Collection Admin</div>
         <h1>Login</h1>
         <label>
           Username
-          <input value={username} onChange={(event) => setUsername(event.target.value)} />
+          <input
+            name="opc-login-username"
+            type="text"
+            value={username}
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            onChange={(event) => setUsername(event.target.value)}
+          />
         </label>
         <label>
           Password
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+          <input
+            name="opc-login-password"
+            type="password"
+            value={password}
+            autoComplete="new-password"
+            onChange={(event) => setPassword(event.target.value)}
+          />
         </label>
         {error ? <p className="error-text">{error}</p> : null}
         <button className="primary-button" type="submit">

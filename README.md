@@ -110,8 +110,8 @@ Log in with the admin username and password from `.env`.
 1. Go to `Machines`
 2. Click `Add Machine`
 3. Enter the machine IP and OPC endpoint
-4. Save the machine
-5. Click `Test Connection`
+4. Click `Test Connection`
+5. Save the machine only after the connection succeeds
 6. Click `Browse Tags`
 7. Select 5 to 10 safe read-only tags
 8. Add the tags
@@ -203,4 +203,3 @@ C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\run_all_c
 - [Collector](docs/collector.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [First Machine Rollout](docs/first_machine_rollout.md)
-
