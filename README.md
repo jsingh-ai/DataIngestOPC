@@ -89,8 +89,8 @@ What the collector does:
 
 - Python 3.11+
 - Node.js 18+
-- Docker Desktop and Docker Compose for local MySQL
 - Access to Azure MySQL for production
+- Docker Desktop is optional and only needed if you want to run the sample local MySQL container on a machine that supports it
 
 Install the Python dependencies into a fresh virtualenv from **Command Prompt**:
 
@@ -108,33 +108,28 @@ Open **Command Prompt**, not PowerShell, for the examples below.
 
 ```cmd
 cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\create_env.py --mode local --overwrite
+C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\create_env.py --mode azure --interactive --output .env --overwrite
 ```
 
-This creates `.env` with local Docker MySQL settings, a secure API secret, and a secure password encryption key.
+This creates `.env` for your Azure MySQL environment. If you are doing a mock-only dry run, you can still set `USE_MOCK_OPC=true` in the file.
 
-### 2) Start local MySQL
-
-```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
-docker compose up -d mysql
-```
-
-### 3) Check the database
+### 2) Check the database
 
 ```cmd
 cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
 C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\check_db.py
 ```
 
-### 4) Create tables and seed defaults
+This tests the live Azure MySQL connection from the VM. It does not require Docker.
+
+### 3) Create tables and seed defaults
 
 ```cmd
 cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
 C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\init_db.py --migrate --seed
 ```
 
-### 5) Start the API
+### 4) Start the API
 
 Open a new Command Prompt window:
 
@@ -143,7 +138,7 @@ cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform\api
 C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-### 6) Start the collector
+### 5) Start the collector
 
 Open a second new Command Prompt window:
 
@@ -152,7 +147,7 @@ cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform\collector
 C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe -m collector.main
 ```
 
-### 7) Start the frontend
+### 6) Start the frontend
 
 Open a third new Command Prompt window:
 
@@ -161,7 +156,7 @@ cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform\frontend
 npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
-### 8) Open the dashboard
+### 7) Open the dashboard
 
 Open this in your browser:
 
@@ -169,7 +164,7 @@ Open this in your browser:
 
 Log in with the admin credentials from `.env`.
 
-### 9) Add your first machine
+### 8) Add your first machine
 
 In the dashboard:
 
@@ -186,7 +181,7 @@ In the dashboard:
 
 ## Azure MySQL Setup
 
-Use this sequence for a real Azure MySQL environment from **Command Prompt**:
+Use this sequence for a real Azure MySQL environment from **Command Prompt**. This is the recommended path for your Windows VM:
 
 ```cmd
 cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
@@ -207,6 +202,18 @@ If Azure MySQL gives an SSL certificate error:
 - Set `DB_SSL_CA` to the CA certificate path
 - Re-run `scripts\check_db.py`
 - If the database user cannot create schemas, ask for the database to be created first or use `--create-database` only if permitted
+
+## Optional Docker Local MySQL
+
+Only use Docker if Docker Desktop is working on your machine.
+
+```cmd
+cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
+C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\create_env.py --mode local --overwrite
+docker compose up -d mysql
+C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\check_db.py
+C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\init_db.py --migrate --seed
+```
 
 ## Real OPC UA Setup
 
@@ -247,7 +254,7 @@ Avoid `--password` unless necessary because it may appear in command history.
 
 ## First Machine Rollout
 
-Use [docs\first_machine_rollout.md](/home/jsingh/projects/DataIngestOPC/opc-platform/docs/first_machine_rollout.md) for the real go-live checklist.
+Use [docs\first_machine_rollout.md](docs/first_machine_rollout.md) for the real go-live checklist.
 
 ## Collector Operations
 
@@ -292,7 +299,7 @@ Useful standalone scripts:
 
 ## Troubleshooting
 
-- SQL connection problems and categorized errors: see [docs\troubleshooting.md](/home/jsingh/projects/DataIngestOPC/opc-platform/docs/troubleshooting.md)
+- SQL connection problems and categorized errors: see [docs\troubleshooting.md](docs/troubleshooting.md)
 - Azure SSL issues: verify `DB_SSL_DISABLED=false` and `DB_SSL_CA`. If you do not provide an explicit CA, the app falls back to the `certifi` CA bundle, but some Azure environments still require a vendor-specific CA bundle.
 - Database does not exist: create it first or use `--create-database` if permitted
 - OPC security mismatch: verify the machine settings match the PLC policy and mode
@@ -304,6 +311,5 @@ Useful standalone scripts:
 - [Runbook](/home/jsingh/projects/DataIngestOPC/opc-platform/docs/runbook.md)
 - [API](/home/jsingh/projects/DataIngestOPC/opc-platform/docs/api.md)
 - [Collector](/home/jsingh/projects/DataIngestOPC/opc-platform/docs/collector.md)
-- [Troubleshooting](/home/jsingh/projects/DataIngestOPC/opc-platform/docs/troubleshooting.md)
-- [First Machine Rollout](/home/jsingh/projects/DataIngestOPC/opc-platform/docs/first_machine_rollout.md)
-
+- [Troubleshooting](docs/troubleshooting.md)
+- [First Machine Rollout](docs/first_machine_rollout.md)

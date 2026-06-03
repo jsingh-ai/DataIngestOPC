@@ -1,5 +1,11 @@
 # Troubleshooting
 
+## Docker Desktop or Compose fails on Windows VM
+
+- You do not need Docker for the Azure MySQL path.
+- Ignore Docker and use `scripts\create_env.py --mode azure`, `scripts\check_db.py`, and `scripts\init_db.py` directly.
+- If you do want Docker, verify Docker Desktop is running and the Linux engine is healthy.
+
 ## Cannot connect to MySQL
 
 - Run `scripts\check_db.py`
