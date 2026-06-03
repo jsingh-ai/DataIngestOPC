@@ -86,13 +86,13 @@ C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\verify_fi
 4. Inspect the SQLite buffer file configured by `COLLECTOR_SQLITE_PATH`.
 
 ```cmd
-sqlite3 C:\path\to\opc_buffer.sqlite "SELECT COUNT(*) FROM buffer_samples;"
+C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe -c "import sqlite3; con = sqlite3.connect(r'C:\path\to\opc_buffer.sqlite'); print(con.execute('SELECT COUNT(*) FROM buffer_samples').fetchone()[0]); con.close()"
 ```
 
 5. If needed, inspect the newest buffered rows before restart.
 
 ```cmd
-sqlite3 C:\path\to\opc_buffer.sqlite "SELECT buffer_id, machine_id, tag_id, created_at, last_flush_error FROM buffer_samples ORDER BY buffer_id DESC LIMIT 20;"
+C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe -c "import sqlite3; con = sqlite3.connect(r'C:\path\to\opc_buffer.sqlite'); rows = con.execute('SELECT buffer_id, machine_id, tag_id, created_at, last_flush_error FROM buffer_samples ORDER BY buffer_id DESC LIMIT 20').fetchall(); print(rows); con.close()"
 ```
 
 6. Restart the collector after the machine is disabled or after the DB issue is corrected.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
+import sys
 import time
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -410,7 +411,16 @@ async def _main() -> None:
     app = CollectorApp(get_settings())
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, app.stop_event.set)
+        try:
+            loop.add_signal_handler(sig, app.stop_event.set)
+        except NotImplementedError:
+            if sys.platform == "win32":
+                try:
+                    signal.signal(sig, lambda *_: app.stop_event.set())
+                except (ValueError, RuntimeError, AttributeError):
+                    logger.debug("signal_handler_unsupported platform=%s signal=%s", sys.platform, sig)
+            else:
+                raise
     await app.run()
 
 

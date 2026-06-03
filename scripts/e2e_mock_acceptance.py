@@ -11,14 +11,14 @@ from pathlib import Path
 from sqlalchemy import create_engine, text
 
 ROOT = Path(__file__).resolve().parents[1]
-PYTHON = str(Path("/home/jsingh/projects/DataIngestOPC/.venv/bin/python"))
+PYTHON = sys.executable
 
 sys.path.insert(0, str(ROOT / "api"))
 sys.path.insert(0, str(ROOT / "collector"))
 
-from app.config import get_settings as get_api_settings  # noqa: E402
-from collector.config import CollectorSettings  # noqa: E402
-from collector.main import CollectorApp  # noqa: E402
+from app.config import get_settings as get_api_settings  # type: ignore[import-not-found]  # noqa: E402
+from collector.config import CollectorSettings  # type: ignore[import-not-found]  # noqa: E402
+from collector.main import CollectorApp  # type: ignore[import-not-found]  # noqa: E402
 
 
 def run(cmd: list[str]) -> None:
@@ -124,9 +124,17 @@ async def run_collector_once(sqlite_path: str) -> dict[str, int]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run a local mock end-to-end acceptance check.")
     parser.add_argument("--tag-count", type=int, default=8)
+    parser.add_argument(
+        "--bootstrap-local",
+        action="store_true",
+        help="Create a local Docker MySQL environment before running the acceptance check.",
+    )
     args = parser.parse_args()
 
-    run([PYTHON, "scripts/create_env.py", "--mode", "local", "--overwrite"])
+    if args.bootstrap_local:
+        run(["docker", "compose", "up", "-d", "mysql"])
+        run([PYTHON, "scripts/create_env.py", "--mode", "local", "--overwrite"])
+
     run([PYTHON, "scripts/check_db.py"])
     run([PYTHON, "scripts/init_db.py", "--migrate", "--seed"])
     run([PYTHON, "scripts/seed_mock_data.py"])
