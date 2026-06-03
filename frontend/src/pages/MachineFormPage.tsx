@@ -89,7 +89,7 @@ export function MachineFormPage(): JSX.Element {
   const savedMachine = machineQuery.data;
 
   const createPayload = {
-    machine_code: form.machine_code.trim(),
+    machine_code: normalizeOptional(form.machine_code),
     display_name: form.display_name.trim(),
     ip_address: form.ip_address.trim(),
     port: form.port,
@@ -345,21 +345,20 @@ export function MachineFormPage(): JSX.Element {
           <div className="form-grid">
             {!isEdit ? (
               <label>
-                <span className="field-label">Machine Code</span>
-                <span className="field-hint">Temporary code or short name, like Radius Code.</span>
+                <span className="field-label">Radius Code (optional)</span>
+                <span className="field-hint">If you have one, enter it here. Leave it blank and we’ll generate a temporary code.</span>
                 <input
                   type="text"
                   value={form.machine_code}
-                  placeholder="Radius Code"
+                  placeholder="Optional"
                   autoComplete="off"
                   spellCheck={false}
-                  required
                   onChange={(event) => updateField("machine_code", event.target.value)}
                 />
               </label>
             ) : (
               <div className="readonly-field">
-                <span className="field-label">Machine Code</span>
+                <span className="field-label">Radius Code</span>
                 <div className="readonly-value">{savedMachine?.machine_code ?? "Loading..."}</div>
                 <span className="field-hint">This code stays fixed after the machine is created.</span>
               </div>

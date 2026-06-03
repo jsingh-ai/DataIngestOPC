@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 from datetime import UTC, datetime
 from collections.abc import Coroutine
@@ -33,6 +34,7 @@ from app.services.machine_service import (
 from app.services.opcua_service import get_opc_service
 
 router = APIRouter(prefix="/api/machines", tags=["machines"])
+logger = logging.getLogger("opc_platform.api.machines")
 
 
 def _run_coro_sync(coro: Coroutine[object, object, tuple[bool, str]]) -> tuple[bool, str]:
@@ -93,11 +95,38 @@ def create_machine_route(
     db: Session = Depends(get_db),
     user: str = Depends(get_current_user),
 ) -> MachineSummary:
+    logger.info(
+        "machine_create_received user=%s machine_code=%s display_name=%s endpoint=%s username_present=%s",
+        user,
+        (payload.machine_code or "").strip() or "<auto>",
+        payload.display_name,
+        payload.opc_endpoint,
+        bool(payload.opc_username),
+    )
     machine = build_machine_from_payload(payload)
+    logger.info(
+        "machine_create_step=opc_test_start machine_code=%s endpoint=%s",
+        machine.machine_code,
+        machine.opc_endpoint,
+    )
     success, message = _run_coro_sync(get_opc_service().test_connection(machine))
     if not success:
+        logger.warning(
+            "machine_create_step=opc_test_failed machine_code=%s endpoint=%s error=%s",
+            machine.machine_code,
+            machine.opc_endpoint,
+            message,
+        )
         raise HTTPException(status_code=400, detail=f"Machine connection test failed: {message}")
+    logger.info("machine_create_step=opc_test_success machine_code=%s endpoint=%s", machine.machine_code, machine.opc_endpoint)
     created = create_machine(db, payload, user, status="connection_tested")
+    logger.info(
+        "machine_create_step=database_saved machine_id=%s machine_code=%s status=%s enabled=%s",
+        created.machine_id,
+        created.machine_code,
+        created.status,
+        created.enabled,
+    )
     return MachineSummary.model_validate({**created.__dict__, "tag_count": 0, "online_status": "unknown"})
 
 
@@ -106,8 +135,33 @@ async def test_connection_preview(
     payload: MachineCreate,
     _: str = Depends(get_current_user),
 ) -> ConnectionTestResponse:
+    logger.info(
+        "machine_test_preview_received machine_code=%s display_name=%s endpoint=%s username_present=%s",
+        (payload.machine_code or "").strip() or "<auto>",
+        payload.display_name,
+        payload.opc_endpoint,
+        bool(payload.opc_username),
+    )
     machine = build_machine_from_payload(payload)
+    logger.info(
+        "machine_test_preview_step=opc_test_start machine_code=%s endpoint=%s",
+        machine.machine_code,
+        machine.opc_endpoint,
+    )
     success, message = await get_opc_service().test_connection(machine)
+    if success:
+        logger.info(
+            "machine_test_preview_step=opc_test_success machine_code=%s endpoint=%s",
+            machine.machine_code,
+            machine.opc_endpoint,
+        )
+    else:
+        logger.warning(
+            "machine_test_preview_step=opc_test_failed machine_code=%s endpoint=%s error=%s",
+            machine.machine_code,
+            machine.opc_endpoint,
+            message,
+        )
     return ConnectionTestResponse(
         success=success,
         message=message,
@@ -177,10 +231,31 @@ async def test_connection(machine_id: int, db: Session = Depends(get_db), _: str
     machine = db.get(Machine, machine_id)
     if machine is None:
         raise HTTPException(status_code=404, detail="Machine not found")
+    logger.info(
+        "machine_test_existing_received machine_id=%s machine_code=%s endpoint=%s",
+        machine.machine_id,
+        machine.machine_code,
+        machine.opc_endpoint,
+    )
+    logger.info("machine_test_existing_step=opc_test_start machine_id=%s machine_code=%s", machine.machine_id, machine.machine_code)
     success, message = await get_opc_service().test_connection(machine)
     machine.status = "connection_tested" if success else "error"
     machine.updated_at = datetime.now(UTC)
     db.commit()
+    if success:
+        logger.info(
+            "machine_test_existing_step=opc_test_success machine_id=%s machine_code=%s status=%s",
+            machine.machine_id,
+            machine.machine_code,
+            machine.status,
+        )
+    else:
+        logger.warning(
+            "machine_test_existing_step=opc_test_failed machine_id=%s machine_code=%s error=%s",
+            machine.machine_id,
+            machine.machine_code,
+            message,
+        )
     return ConnectionTestResponse(
         success=success,
         message=message,

@@ -20,7 +20,7 @@ class PaginatedResponse(BaseModel):
 
 
 class MachineBase(BaseModel):
-    machine_code: str = Field(max_length=64)
+    machine_code: str | None = Field(default=None, max_length=64)
     display_name: str = Field(max_length=128)
     ip_address: str = Field(max_length=64)
     port: int = Field(default=4840, ge=1, le=65535)

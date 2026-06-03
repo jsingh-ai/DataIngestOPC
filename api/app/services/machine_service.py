@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
+import re
 
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
@@ -10,9 +12,25 @@ from app.schemas import MachineCreate, MachineUpdate
 from app.security import encrypt_secret
 
 
+def _slugify_machine_code(value: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", value.strip()).strip("-")
+    return slug.upper()
+
+
+def resolve_machine_code(payload: MachineCreate) -> str:
+    if payload.machine_code and payload.machine_code.strip():
+        return payload.machine_code.strip()
+    base_source = payload.display_name.strip() or payload.ip_address.strip() or "MACHINE"
+    base = _slugify_machine_code(base_source) or "MACHINE"
+    digest_input = f"{payload.display_name.strip()}|{payload.ip_address.strip()}|{payload.port}|{payload.opc_endpoint.strip()}"
+    suffix = hashlib.sha1(digest_input.encode("utf-8")).hexdigest()[:6].upper()
+    candidate = f"TMP-{base[:40]}-{suffix}"
+    return candidate[:64]
+
+
 def build_machine_from_payload(payload: MachineCreate) -> Machine:
     return Machine(
-        machine_code=payload.machine_code,
+        machine_code=resolve_machine_code(payload),
         display_name=payload.display_name,
         ip_address=payload.ip_address,
         port=payload.port,
