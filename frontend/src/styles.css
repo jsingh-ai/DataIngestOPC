@@ -286,11 +286,82 @@ select {
   font: inherit;
 }
 
+.mono-cell {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.88rem;
+  color: #2a423d;
+  word-break: break-all;
+}
+
 .browse-footer-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
   margin: 16px 0 12px;
+}
+
+.browse-loading {
+  margin: 14px 0;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(16, 35, 29, 0.08);
+  background: linear-gradient(180deg, rgba(247, 249, 246, 0.96), rgba(238, 245, 238, 0.96));
+}
+
+.browse-loading-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.browse-loading-title {
+  font-weight: 900;
+  font-size: 1.05rem;
+  color: #17312b;
+}
+
+.browse-loading-pill {
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: #e2f2e1;
+  color: #1a4b22;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.browse-loading-text {
+  color: rgba(16, 35, 29, 0.72);
+  margin-bottom: 16px;
+  line-height: 1.45;
+}
+
+.browse-loading-tree {
+  display: grid;
+  gap: 10px;
+}
+
+.browse-loading-node {
+  height: 18px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(192, 208, 192, 0.4), rgba(227, 236, 226, 0.95), rgba(192, 208, 192, 0.4));
+  background-size: 200% 100%;
+  animation: browse-loading-shimmer 1.5s infinite linear;
+}
+
+.browse-loading-node-wide {
+  width: 78%;
+}
+
+.browse-loading-node-medium {
+  width: 58%;
+  margin-left: 16px;
+}
+
+.browse-loading-node-small {
+  width: 42%;
+  margin-left: 30px;
 }
 
 .browse-summary {
@@ -320,6 +391,16 @@ select {
   border: 1px dashed rgba(16, 35, 29, 0.18);
   background: rgba(255, 255, 255, 0.55);
   color: rgba(16, 35, 29, 0.76);
+}
+
+@keyframes browse-loading-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .machine-group {

@@ -8,9 +8,11 @@ import type { BrowseCacheItem, PaginatedResponse } from "../types/api";
 type BrowseOperationKind = "discover" | "add";
 type BrowseOperationState = "idle" | "running" | "success" | "error";
 type BrowseStep = 0 | 1 | 2 | 3;
+
 type BrowseTrailItem = {
   nodeId: string | null;
   label: string;
+  browsePath: string | null;
 };
 
 type OperationResult = {
@@ -18,25 +20,78 @@ type OperationResult = {
   message: string;
 };
 
+type DiscoverRequest = {
+  nodeId: string | null;
+  label: string;
+  browsePath: string | null;
+};
+
+const ROOT_TRAIL_ITEM: BrowseTrailItem = {
+  nodeId: null,
+  label: "Root / Objects",
+  browsePath: null,
+};
+
+function getFolderLabel(item: BrowseCacheItem): string {
+  return item.browse_path ?? item.display_name ?? item.opc_node_id;
+}
+
 export function BrowsePage(): JSX.Element {
   const { machineId } = useParams();
   const queryClient = useQueryClient();
+  const storageKey = machineId ? `opc-platform:browse-trail:${machineId}` : null;
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [trail, setTrail] = useState<BrowseTrailItem[]>([{ nodeId: null, label: "Root / Objects" }]);
+  const [trail, setTrail] = useState<BrowseTrailItem[]>([ROOT_TRAIL_ITEM]);
   const [operationKind, setOperationKind] = useState<BrowseOperationKind | null>(null);
   const [operationState, setOperationState] = useState<BrowseOperationState>("idle");
   const [operationStep, setOperationStep] = useState<BrowseStep>(0);
   const [operationMessage, setOperationMessage] = useState("");
   const resultRef = useRef<OperationResult | null>(null);
-  const currentRoot = trail[trail.length - 1];
+
+  const currentRoot = trail[trail.length - 1] ?? ROOT_TRAIL_ITEM;
+  const currentFolderPath = currentRoot.browsePath;
+
+  useEffect(() => {
+    if (!storageKey) {
+      return;
+    }
+    const savedTrail = window.localStorage.getItem(storageKey);
+    if (!savedTrail) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(savedTrail) as BrowseTrailItem[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setTrail(
+          parsed.map((item) => ({
+            nodeId: item.nodeId ?? null,
+            label: item.label || ROOT_TRAIL_ITEM.label,
+            browsePath: item.browsePath ?? null,
+          })),
+        );
+      }
+    } catch {
+      // Ignore malformed local storage.
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!storageKey) {
+      return;
+    }
+    window.localStorage.setItem(storageKey, JSON.stringify(trail));
+  }, [storageKey, trail]);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+    if (currentFolderPath) {
+      params.set("folder_path", currentFolderPath);
+    }
     return params.toString();
-  }, [page, pageSize]);
+  }, [currentFolderPath, page, pageSize]);
 
   useEffect(() => {
     setPage(1);
@@ -54,47 +109,81 @@ export function BrowsePage(): JSX.Element {
       if (item.node_class === "Variable") {
         continue;
       }
-      const key = item.opc_node_id;
-      if (!seen.has(key)) {
-        seen.set(key, item);
+      if (!seen.has(item.opc_node_id)) {
+        seen.set(item.opc_node_id, item);
       }
     }
-    return Array.from(seen.values()).sort((left, right) => (left.browse_path ?? left.display_name ?? "").localeCompare(right.browse_path ?? right.display_name ?? ""));
+    return Array.from(seen.values()).sort((left, right) =>
+      (left.browse_path ?? left.display_name ?? "").localeCompare(right.browse_path ?? right.display_name ?? ""),
+    );
   }, [browseQuery.data?.items]);
 
   const canClear = (browseQuery.data?.total ?? 0) > 0;
   const canAdd = selectedIds.length > 0;
+  const showBrowseSkeleton = browseQuery.isLoading || (browseQuery.isFetching && !browseQuery.data);
 
-  function beginOperation(kind: BrowseOperationKind) {
+  function beginOperation(kind: BrowseOperationKind, label: string) {
     setOperationKind(kind);
     setOperationState("running");
     setOperationStep(1);
     setActionError(null);
     resultRef.current = null;
     if (kind === "discover") {
-      setOperationMessage(`Discovering tags inside ${currentRoot.label}...`);
+      setOperationMessage(`Loading folders inside ${label}...`);
     } else {
-      setOperationMessage("Preparing selected tags for the active list...");
+      setOperationMessage("Preparing selected rows for the active list...");
     }
   }
 
-  const discoverMutation = useMutation<{
-    discovered_count: number;
-    variable_count: number;
-    cache_upserts: number;
-    message: string;
-  }>({
-    mutationFn: () =>
+  function navigateToFolder(item: BrowseCacheItem) {
+    const itemLabel = getFolderLabel(item);
+    const isCurrentFolder = currentRoot.nodeId === item.opc_node_id;
+
+    setSelectedIds([]);
+    setActionError(null);
+
+    if (isCurrentFolder) {
+      setTrail((current) => (current.length > 1 ? current.slice(0, -1) : current));
+      return;
+    }
+
+    setTrail((current) => [
+      ...current,
+      {
+        nodeId: item.opc_node_id,
+        label: itemLabel,
+        browsePath: item.browse_path ?? null,
+      },
+    ]);
+
+    discoverMutation.mutate({
+      nodeId: item.opc_node_id,
+      label: itemLabel,
+      browsePath: item.browse_path ?? null,
+    });
+  }
+
+  const discoverMutation = useMutation<
+    {
+      discovered_count: number;
+      variable_count: number;
+      cache_upserts: number;
+      message: string;
+    },
+    Error,
+    DiscoverRequest
+  >({
+    mutationFn: ({ nodeId, label }) =>
       apiFetch(`/api/machines/${machineId}/browse-tags`, {
         method: "POST",
         body: JSON.stringify({
-          max_nodes: 2000,
-          max_depth: 6,
-          root_node_id: currentRoot.nodeId,
-          root_label: currentRoot.label,
+          max_nodes: 500,
+          max_depth: 1,
+          root_node_id: nodeId,
+          root_label: label,
         }),
       }),
-    onMutate: () => beginOperation("discover"),
+    onMutate: (variables) => beginOperation("discover", variables.label),
     onSuccess: async (result) => {
       resultRef.current = {
         success: true,
@@ -120,7 +209,7 @@ export function BrowsePage(): JSX.Element {
           tags: selectedIds.map((cacheId) => ({ cache_id: cacheId })),
         }),
       }),
-    onMutate: () => beginOperation("add"),
+    onMutate: () => beginOperation("add", currentRoot.label),
     onSuccess: async (result) => {
       resultRef.current = {
         success: true,
@@ -160,7 +249,7 @@ export function BrowsePage(): JSX.Element {
       }, 650);
       step3Timer = window.setTimeout(() => {
         setOperationStep(3);
-        setOperationMessage("Building the discovered tag list...");
+        setOperationMessage("Building the folder and tag list...");
       }, 1250);
     } else {
       step2Timer = window.setTimeout(() => {
@@ -203,9 +292,6 @@ export function BrowsePage(): JSX.Element {
     };
   }, [currentRoot.label, operationKind, operationState]);
 
-  if (browseQuery.isLoading) {
-    return <section className="page"><div className="panel">Loading browse cache...</div></section>;
-  }
   if (browseQuery.isError) {
     return <section className="page"><div className="panel error-text">{(browseQuery.error as Error).message}</div></section>;
   }
@@ -213,7 +299,7 @@ export function BrowsePage(): JSX.Element {
   const totalPages = Math.max(1, Math.ceil((browseQuery.data?.total ?? 0) / pageSize));
   const totalRows = browseQuery.data?.total ?? 0;
   const showActionsBelowTable = canClear || canAdd;
-  const discoverButtonLabel = currentRoot.nodeId ? `Discover inside ${currentRoot.label}` : "Discover Tags";
+  const discoverButtonLabel = currentRoot.nodeId ? "Refresh Folder" : "Load Folders";
 
   return (
     <section className="page">
@@ -222,7 +308,7 @@ export function BrowsePage(): JSX.Element {
           <div className={`modal-card modal-${operationState}`}>
             <div className="modal-header">
               <div>
-                <div className="brand-kicker">{operationKind === "discover" ? "Discover Tags" : "Add Tags"}</div>
+                <div className="brand-kicker">{operationKind === "discover" ? "Browse Folders" : "Add Tags"}</div>
                 <h3 id="browse-operation-title">
                   {operationState === "running"
                     ? operationKind === "discover"
@@ -234,7 +320,7 @@ export function BrowsePage(): JSX.Element {
                 </h3>
                 <p className="modal-lead">
                   {operationKind === "discover"
-                    ? "This is read-only discovery. It only looks at the machine and builds the list."
+                    ? "This is read-only discovery. It only looks at the machine and builds the folder list."
                     : "This saves selected rows into the active tag list used by the collector."}
                 </p>
               </div>
@@ -248,10 +334,10 @@ export function BrowsePage(): JSX.Element {
                 <div className="modal-summary-text">
                   {operationState === "success"
                     ? operationKind === "discover"
-                      ? "You can now select folders or rows and add them to Active Tags."
+                      ? "Folders and tags are ready. Open folders to go deeper or add the rows you want."
                       : "Your selected tags are now in the active list."
                     : operationState === "error"
-                      ? "Check the machine endpoint, browse root, or selected rows, then try again."
+                      ? "Check the machine endpoint, folder path, or selected rows, then try again."
                       : "The steps below will move one by one so you can follow along."}
                 </div>
               </div>
@@ -273,18 +359,22 @@ export function BrowsePage(): JSX.Element {
                     <div className="step-title">{operationKind === "discover" ? "Walk the folder tree" : "Save active tags"}</div>
                     <div className="step-subtitle">
                       {operationKind === "discover"
-                        ? "Move through the selected folder and collect children."
+                        ? "Move through the selected folder and collect its children."
                         : "Write the selected rows into the live tag list the collector uses."}
                     </div>
                   </div>
                 </div>
-                <div className={`step-card ${operationStep >= 3 ? operationState === "success" ? "step-done" : operationState === "error" ? "step-error" : "step-active" : ""}`}>
+                <div
+                  className={`step-card ${
+                    operationStep >= 3 ? (operationState === "success" ? "step-done" : operationState === "error" ? "step-error" : "step-active") : ""
+                  }`}
+                >
                   <div className="step-bullet">3</div>
                   <div>
                     <div className="step-title">{operationKind === "discover" ? "Build the list" : "Refresh the tag view"}</div>
                     <div className="step-subtitle">
                       {operationKind === "discover"
-                        ? "Populate the discovered tag rows so you can choose what to add."
+                        ? "Populate the discovered folder rows so you can keep drilling down."
                         : "Refresh the active tag list after saving."}
                     </div>
                   </div>
@@ -297,7 +387,11 @@ export function BrowsePage(): JSX.Element {
                     type="button"
                     onClick={() => {
                       if (operationKind === "discover") {
-                        discoverMutation.mutate();
+                        discoverMutation.mutate({
+                          nodeId: currentRoot.nodeId,
+                          label: currentRoot.label,
+                          browsePath: currentRoot.browsePath,
+                        });
                       } else {
                         addMutation.mutate();
                       }
@@ -328,25 +422,33 @@ export function BrowsePage(): JSX.Element {
       ) : null}
 
       <div className="page-header">
-          <div>
-            <div className="brand-kicker">Step 1 of 2</div>
-            <h2>Discover Tags</h2>
-            <p className="page-lead">
-            Start a discovery, pick a folder if you need to drill down, then add the rows you want into Active Tags.
-            </p>
-          </div>
+        <div>
+          <div className="brand-kicker">Step 1 of 2</div>
+          <h2>Discover Tags</h2>
+          <p className="page-lead">Load the machine, open folders one by one, then add the rows you want into Active Tags.</p>
+        </div>
       </div>
 
       <div className="panel browse-discovery-panel">
         <div className="browse-discovery-copy">
           <div className="guide-title">Read the machine first</div>
           <div className="guide-text">
-            Discovery is read-only. It does not write anything back to the PLC. If the machine has folders, click one to browse inside it.
+            Discovery is read-only. It does not write anything back to the PLC. Click a folder to open it, then keep going until tags appear.
           </div>
         </div>
         <div className="browse-discovery-actions">
-          <button className="primary-button browse-discover-button" onClick={() => discoverMutation.mutate()} disabled={discoverMutation.isPending}>
-            {discoverMutation.isPending ? "Discovering..." : discoverButtonLabel}
+          <button
+            className="primary-button browse-discover-button"
+            onClick={() =>
+              discoverMutation.mutate({
+                nodeId: currentRoot.nodeId,
+                label: currentRoot.label,
+                browsePath: currentRoot.browsePath,
+              })
+            }
+            disabled={discoverMutation.isPending}
+          >
+            {discoverMutation.isPending ? "Loading..." : discoverButtonLabel}
           </button>
           <div className="browse-discovery-status">
             Current folder: <strong>{currentRoot.label}</strong>
@@ -356,12 +458,12 @@ export function BrowsePage(): JSX.Element {
 
       <div className="panel machine-guide">
         <div className="guide-card">
-          <div className="guide-title">1. Discover</div>
-          <div className="guide-text">Read the machine and build the list of available nodes.</div>
+          <div className="guide-title">1. Load</div>
+          <div className="guide-text">Read the machine and show the top folders first.</div>
         </div>
         <div className="guide-card">
-          <div className="guide-title">2. Drill down</div>
-          <div className="guide-text">If folders appear, click one to browse inside that folder.</div>
+          <div className="guide-title">2. Open folders</div>
+          <div className="guide-text">Click a plus to open a folder. Click it again to close it.</div>
         </div>
         <div className="guide-card">
           <div className="guide-title">3. Add</div>
@@ -392,116 +494,134 @@ export function BrowsePage(): JSX.Element {
 
         <div className="browse-breadcrumbs">
           {trail.map((step, index) => (
-              <button
-                key={`${step.label}-${index}`}
-                type="button"
-                className={`browse-breadcrumb ${index === trail.length - 1 ? "browse-breadcrumb-active" : ""}`}
-                onClick={() => {
-                  setTrail((current) => current.slice(0, index + 1));
-                }}
-              >
-                {step.label}
-              </button>
-            ))}
+            <button
+              key={`${step.label}-${index}`}
+              type="button"
+              className={`browse-breadcrumb ${index === trail.length - 1 ? "browse-breadcrumb-active" : ""}`}
+              onClick={() => {
+                setTrail((current) => current.slice(0, index + 1));
+                setSelectedIds([]);
+              }}
+            >
+              {step.label}
+            </button>
+          ))}
           {trail.length > 1 ? (
             <button
               type="button"
               className="browse-breadcrumb browse-breadcrumb-secondary"
-                onClick={() => setTrail((current) => current.slice(0, -1))}
-              >
-                Up one level
-              </button>
-            ) : null}
+              onClick={() => {
+                setTrail((current) => current.slice(0, -1));
+                setSelectedIds([]);
+              }}
+            >
+              Up one level
+            </button>
+          ) : null}
         </div>
 
         {discoveredFolders.length ? (
           <div className="browse-folder-tray">
-            <div className="browse-folder-label">Folders you can browse into</div>
+            <div className="browse-folder-label">Folders you can open</div>
             <div className="browse-folder-list">
               <button
                 className={`browse-folder-chip ${currentRoot.nodeId === null ? "browse-folder-chip-active" : ""}`}
                 type="button"
                 onClick={() => {
-                  setTrail([{ nodeId: null, label: "Root / Objects" }]);
+                  setTrail([ROOT_TRAIL_ITEM]);
+                  setSelectedIds([]);
+                  setActionError(null);
                 }}
               >
-                Root / Objects
+                {currentRoot.nodeId === null ? "−" : "+"} Root / Objects
               </button>
               {discoveredFolders.map((item) => (
                 <button
                   key={item.opc_node_id}
                   className={`browse-folder-chip ${currentRoot.nodeId === item.opc_node_id ? "browse-folder-chip-active" : ""}`}
                   type="button"
-                  onClick={() => {
-                    setTrail((current) => [
-                      ...current,
-                      { nodeId: item.opc_node_id, label: item.browse_path ?? item.display_name ?? item.opc_node_id },
-                    ]);
-                  }}
+                  onClick={() => navigateToFolder(item)}
                 >
-                  {item.browse_path ?? item.display_name ?? item.opc_node_id}
+                  {currentRoot.nodeId === item.opc_node_id ? "−" : "+"} {getFolderLabel(item)}
                 </button>
               ))}
             </div>
           </div>
         ) : null}
 
-        {totalRows === 0 ? (
-          <div className="browse-empty">
-            No discovered nodes yet. Click <strong>{discoverButtonLabel}</strong> to read the machine and populate this list.
+        {showBrowseSkeleton ? (
+          <div className="browse-loading">
+            <div className="browse-loading-header">
+              <div className="browse-loading-title">Populating folders...</div>
+              <div className="browse-loading-pill">Read-only</div>
+            </div>
+            <div className="browse-loading-text">
+              The machine is being read now. First you will see folders, then you can open a folder to get to the tags.
+            </div>
+            <div className="browse-loading-tree" aria-hidden="true">
+              <div className="browse-loading-node browse-loading-node-wide" />
+              <div className="browse-loading-node browse-loading-node-medium" />
+              <div className="browse-loading-node browse-loading-node-small" />
+              <div className="browse-loading-node browse-loading-node-medium" />
+              <div className="browse-loading-node browse-loading-node-wide" />
+            </div>
           </div>
         ) : null}
 
-        <VirtualTable
-          rows={browseQuery.data?.items ?? []}
-          columns={[
-            {
-              key: "select",
-              header: "Select",
-              width: "72px",
-              render: (row) => (
-                <input
-                  type="checkbox"
-                  disabled={row.node_class !== "Variable"}
-                  checked={selectedIds.includes(row.cache_id)}
-                  onChange={(event) =>
-                    setSelectedIds((current) =>
-                      event.target.checked ? [...current, row.cache_id] : current.filter((id) => id !== row.cache_id),
-                    )
-                  }
-                />
-              ),
-            },
-            {
-              key: "browse_path",
-              header: "Folder / Path",
-              width: "280px",
-              render: (row) =>
-                row.node_class !== "Variable" ? (
-                  <button
-                    type="button"
-                    className="browse-path-button"
-                    onClick={() => {
-                      setTrail((current) => [
-                        ...current,
-                        { nodeId: row.opc_node_id, label: row.browse_path ?? row.display_name ?? row.opc_node_id },
-                      ]);
-                    }}
-                  >
-                    {row.browse_path ?? ""}
-                  </button>
-                ) : (
-                  <span>{row.browse_path ?? ""}</span>
+        {!showBrowseSkeleton && totalRows === 0 ? (
+          <div className="browse-empty">
+            No folders or tags are shown yet. Click <strong>{discoverButtonLabel}</strong> to read the machine and start the folder tree.
+          </div>
+        ) : null}
+
+        {!showBrowseSkeleton ? (
+          <VirtualTable
+            rows={browseQuery.data?.items ?? []}
+            columns={[
+              {
+                key: "select",
+                header: "Select",
+                width: "72px",
+                render: (row) => (
+                  <input
+                    type="checkbox"
+                    disabled={row.node_class !== "Variable"}
+                    checked={selectedIds.includes(row.cache_id)}
+                    onChange={(event) =>
+                      setSelectedIds((current) =>
+                        event.target.checked ? [...current, row.cache_id] : current.filter((id) => id !== row.cache_id),
+                      )
+                    }
+                  />
                 ),
-            },
-            { key: "opc_node_id", header: "Node ID", width: "280px", render: (row) => row.opc_node_id },
-            { key: "display_name", header: "Name", width: "160px", render: (row) => row.display_name ?? "" },
-            { key: "browse_name", header: "Browse Name", width: "140px", render: (row) => row.browse_name ?? "" },
-            { key: "node_class", header: "Class", width: "110px", render: (row) => row.node_class ?? "" },
-            { key: "data_type", header: "Type", width: "110px", render: (row) => row.data_type ?? "" },
-            { key: "already_added", header: "Already Added", width: "120px", render: (row) => String(row.already_added) },
-          ]}
-        />
+              },
+              {
+                key: "browse_path",
+                header: "Folder / Path",
+                width: "280px",
+                render: (row) =>
+                  row.node_class !== "Variable" ? (
+                    <button type="button" className="browse-path-button" onClick={() => navigateToFolder(row)}>
+                      {currentRoot.nodeId === row.opc_node_id ? "−" : "+"} {row.browse_path ?? ""}
+                    </button>
+                  ) : (
+                    <span>{row.browse_path ?? ""}</span>
+                  ),
+              },
+              {
+                key: "opc_node_id",
+                header: "Node ID",
+                width: "280px",
+                render: (row) => <span className="mono-cell">{row.opc_node_id}</span>,
+              },
+              { key: "display_name", header: "Name", width: "160px", render: (row) => row.display_name ?? "" },
+              { key: "browse_name", header: "Browse Name", width: "140px", render: (row) => row.browse_name ?? "" },
+              { key: "node_class", header: "Class", width: "110px", render: (row) => row.node_class ?? "" },
+              { key: "data_type", header: "Type", width: "110px", render: (row) => row.data_type ?? "" },
+              { key: "already_added", header: "Already Added", width: "120px", render: (row) => String(row.already_added) },
+            ]}
+          />
+        ) : null}
 
         {showActionsBelowTable ? (
           <div className="browse-footer-actions">
@@ -524,7 +644,13 @@ export function BrowsePage(): JSX.Element {
           <button className="ghost-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>
             Next
           </button>
-          <select value={pageSize} onChange={(event) => { setPage(1); setPageSize(Number(event.target.value)); }}>
+          <select
+            value={pageSize}
+            onChange={(event) => {
+              setPage(1);
+              setPageSize(Number(event.target.value));
+            }}
+          >
             <option value={100}>100</option>
             <option value={250}>250</option>
             <option value={500}>500</option>
