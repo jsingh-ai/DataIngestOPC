@@ -49,7 +49,7 @@ export function BrowsePage(): JSX.Element {
   const [operationState, setOperationState] = useState<BrowseOperationState>("idle");
   const [operationStep, setOperationStep] = useState<BrowseStep>(0);
   const [operationMessage, setOperationMessage] = useState("");
-  const resultRef = useRef<OperationResult | null>(null);
+  const initialAutoLoadDoneRef = useRef(false);
 
   const currentRoot = trail[trail.length - 1] ?? ROOT_TRAIL_ITEM;
   const currentFolderPath = currentRoot.browsePath;
@@ -127,7 +127,6 @@ export function BrowsePage(): JSX.Element {
     setOperationState("running");
     setOperationStep(1);
     setActionError(null);
-    resultRef.current = null;
     if (kind === "discover") {
       setOperationMessage(`Loading folders inside ${label}...`);
     } else {
@@ -185,14 +184,17 @@ export function BrowsePage(): JSX.Element {
       }),
     onMutate: (variables) => beginOperation("discover", variables.label),
     onSuccess: async (result) => {
-      resultRef.current = {
-        success: true,
-        message: `${result.message} ${result.discovered_count} nodes found${result.variable_count ? `, ${result.variable_count} variables` : ""}.`,
-      };
+      setOperationState("idle");
+      setOperationStep(0);
+      setOperationMessage("");
+      setActionError(null);
       await queryClient.invalidateQueries({ queryKey: ["browse-cache", machineId] });
     },
     onError: (error) => {
-      resultRef.current = { success: false, message: (error as Error).message };
+      setOperationState("error");
+      setOperationStep(3);
+      setOperationMessage((error as Error).message);
+      setActionError((error as Error).message);
     },
   });
 
@@ -211,16 +213,18 @@ export function BrowsePage(): JSX.Element {
       }),
     onMutate: () => beginOperation("add", currentRoot.label),
     onSuccess: async (result) => {
-      resultRef.current = {
-        success: true,
-        message: `Added ${result.created_count} tag${result.created_count === 1 ? "" : "s"} to Active Tags.`,
-      };
+      setOperationState("success");
+      setOperationStep(0);
+      setOperationMessage(`Added ${result.created_count} tag${result.created_count === 1 ? "" : "s"} to Active Tags.`);
       setSelectedIds([]);
       await queryClient.invalidateQueries({ queryKey: ["browse-cache", machineId] });
       await queryClient.invalidateQueries({ queryKey: ["tags", machineId] });
     },
     onError: (error) => {
-      resultRef.current = { success: false, message: (error as Error).message };
+      setOperationState("error");
+      setOperationStep(3);
+      setOperationMessage((error as Error).message);
+      setActionError((error as Error).message);
     },
   });
 
@@ -235,60 +239,39 @@ export function BrowsePage(): JSX.Element {
   });
 
   useEffect(() => {
-    if (operationState !== "running") {
+    if (initialAutoLoadDoneRef.current) {
       return;
     }
-    let step2Timer: number | undefined;
-    let step3Timer: number | undefined;
-    let finishTimer: number | undefined;
-
-    if (operationKind === "discover") {
-      step2Timer = window.setTimeout(() => {
-        setOperationStep(2);
-        setOperationMessage(`Walking folders inside ${currentRoot.label}...`);
-      }, 650);
-      step3Timer = window.setTimeout(() => {
-        setOperationStep(3);
-        setOperationMessage("Building the folder and tag list...");
-      }, 1250);
-    } else {
-      step2Timer = window.setTimeout(() => {
-        setOperationStep(2);
-        setOperationMessage("Saving the selected rows into Active Tags...");
-      }, 650);
-      step3Timer = window.setTimeout(() => {
-        setOperationStep(3);
-        setOperationMessage("Updating the active tag list...");
-      }, 1250);
+    if (browseQuery.isFetching || browseQuery.data === undefined) {
+      return;
     }
+    if ((browseQuery.data?.total ?? 0) > 0) {
+      initialAutoLoadDoneRef.current = true;
+      return;
+    }
+    initialAutoLoadDoneRef.current = true;
+    discoverMutation.mutate({
+      nodeId: currentRoot.nodeId,
+      label: currentRoot.label,
+      browsePath: currentRoot.browsePath,
+    });
+  }, [browseQuery.data, browseQuery.isFetching, currentRoot.label, currentRoot.nodeId, currentRoot.browsePath]);
 
-    finishTimer = window.setTimeout(() => {
-      const outcome = resultRef.current;
-      if (!outcome) {
-        setOperationState("error");
-        setOperationStep(3);
-        setOperationMessage("The action did not return a result.");
-        setActionError("The action did not return a result.");
-        return;
-      }
-      setOperationState(outcome.success ? "success" : "error");
+  useEffect(() => {
+    if (operationState !== "running" || operationKind !== "discover") {
+      return;
+    }
+    const step2Timer = window.setTimeout(() => {
+      setOperationStep(2);
+      setOperationMessage(`Walking folders inside ${currentRoot.label}...`);
+    }, 450);
+    const step3Timer = window.setTimeout(() => {
       setOperationStep(3);
-      setOperationMessage(outcome.message);
-      if (!outcome.success) {
-        setActionError(outcome.message);
-      }
-    }, 1900);
-
+      setOperationMessage("Building the folder list...");
+    }, 950);
     return () => {
-      if (step2Timer) {
-        window.clearTimeout(step2Timer);
-      }
-      if (step3Timer) {
-        window.clearTimeout(step3Timer);
-      }
-      if (finishTimer) {
-        window.clearTimeout(finishTimer);
-      }
+      window.clearTimeout(step2Timer);
+      window.clearTimeout(step3Timer);
     };
   }, [currentRoot.label, operationKind, operationState]);
 
@@ -574,7 +557,7 @@ export function BrowsePage(): JSX.Element {
                   setOperationKind(null);
                   setOperationStep(0);
                   setOperationMessage("");
-                  resultRef.current = null;
+                  setActionError(null);
                 }}
               >
                 Continue
