@@ -70,21 +70,42 @@ export function BrowsePage(): JSX.Element {
     <section className="page">
       <div className="page-header">
         <div>
-          <div className="brand-kicker">Browse Cache</div>
-          <h2>OPC UA Browse</h2>
+          <div className="brand-kicker">Step 1 of 2</div>
+          <h2>Discover Tags</h2>
+          <p className="page-lead">
+            This page reads the machine and shows what tags exist. Nothing is added yet. Pick the ones you want, then add them to the active tag list.
+          </p>
         </div>
         <div className="action-row">
-          <input value={search} placeholder="Search browse cache" onChange={(event) => setSearch(event.target.value)} />
-          <button className="ghost-button" onClick={() => browseQuery.refetch()}>Refresh Grid</button>
+          <input value={search} placeholder="Search discovered tags" onChange={(event) => setSearch(event.target.value)} />
+          <button className="ghost-button" onClick={() => browseQuery.refetch()}>Refresh List</button>
           <button className="ghost-button" onClick={() => refreshMutation.mutate()} disabled={refreshMutation.isPending}>
-            {refreshMutation.isPending ? "Browsing..." : "Refresh Browse Cache"}
+            {refreshMutation.isPending ? "Scanning..." : "Discover Tags"}
           </button>
           <button className="primary-button" onClick={() => addMutation.mutate()} disabled={!selectedIds.length || addMutation.isPending}>
-            {addMutation.isPending ? "Adding..." : "Add Selected Tags"}
+            {addMutation.isPending ? "Adding..." : "Add Selected to Active Tags"}
           </button>
           <button className="ghost-button" onClick={() => clearMutation.mutate()} disabled={clearMutation.isPending}>
             {clearMutation.isPending ? "Clearing..." : "Clear Cache"}
           </button>
+        </div>
+      </div>
+      <div className="panel machine-guide">
+        <div className="guide-card">
+          <div className="guide-title">1. Discover</div>
+          <div className="guide-text">Read the machine and refresh the list of available OPC tags.</div>
+        </div>
+        <div className="guide-card">
+          <div className="guide-title">2. Select</div>
+          <div className="guide-text">Choose the tags you want to start collecting.</div>
+        </div>
+        <div className="guide-card">
+          <div className="guide-title">3. Add</div>
+          <div className="guide-text">Move the chosen tags into the active tag list used by the collector.</div>
+        </div>
+        <div className="guide-card">
+          <div className="guide-title">Read-only</div>
+          <div className="guide-text">Browsing only looks. It does not write back to the machine.</div>
         </div>
       </div>
       <div className="panel">
@@ -114,7 +135,7 @@ export function BrowsePage(): JSX.Element {
             { key: "browse_name", header: "Browse Name", width: "140px", render: (row) => row.browse_name ?? "" },
             { key: "node_class", header: "Class", width: "110px", render: (row) => row.node_class ?? "" },
             { key: "data_type", header: "Type", width: "110px", render: (row) => row.data_type ?? "" },
-            { key: "already_added", header: "Added", width: "90px", render: (row) => String(row.already_added) },
+            { key: "already_added", header: "Already Added", width: "120px", render: (row) => String(row.already_added) },
           ]}
         />
         <div className="action-row">

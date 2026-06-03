@@ -108,11 +108,14 @@ export function TagsPage(): JSX.Element {
     <section className="page">
       <div className="page-header">
         <div>
-          <div className="brand-kicker">Tag Admin</div>
-          <h2>Machine Tags</h2>
+          <div className="brand-kicker">Step 2 of 2</div>
+          <h2>Active Tags</h2>
+          <p className="page-lead">
+            These are the tags the collector actually reads. Rename them, turn them on or off, and choose how often each one should be sampled.
+          </p>
         </div>
         <div className="action-row">
-          <input value={search} placeholder="Search tags" onChange={(event) => setSearch(event.target.value)} />
+          <input value={search} placeholder="Search active tags" onChange={(event) => setSearch(event.target.value)} />
           <select value={enabledFilter} onChange={(event) => setEnabledFilter(event.target.value)}>
             <option value="all">All</option>
             <option value="enabled">Enabled</option>
@@ -121,19 +124,37 @@ export function TagsPage(): JSX.Element {
           <button className="ghost-button" onClick={() => tagsQuery.refetch()}>Refresh</button>
         </div>
       </div>
+      <div className="panel machine-guide">
+        <div className="guide-card">
+          <div className="guide-title">1. Rename</div>
+          <div className="guide-text">Make the tag names readable for operators and reports.</div>
+        </div>
+        <div className="guide-card">
+          <div className="guide-title">2. Turn on / off</div>
+          <div className="guide-text">Control whether the collector should read the tag.</div>
+        </div>
+        <div className="guide-card">
+          <div className="guide-title">3. Choose speed</div>
+          <div className="guide-text">Pick how often the collector should sample each tag.</div>
+        </div>
+        <div className="guide-card">
+          <div className="guide-title">4. Bulk actions</div>
+          <div className="guide-text">Select several tags and change them together.</div>
+        </div>
+      </div>
       <div className="panel stack">
         {actionError ? <div className="error-text">{actionError}</div> : null}
         <div className="action-row">
           <div>{selectedIds.length} selected</div>
           <div className="action-row">
             <button className="ghost-button" disabled={!selectedIds.length || bulkEnable.isPending} onClick={() => bulkEnable.mutate()}>
-              {bulkEnable.isPending ? "Enabling..." : "Bulk Enable"}
+              {bulkEnable.isPending ? "Turning On..." : "Turn On Selected"}
             </button>
             <button className="ghost-button" disabled={!selectedIds.length || bulkDisable.isPending} onClick={() => bulkDisable.mutate()}>
-              {bulkDisable.isPending ? "Disabling..." : "Bulk Disable"}
+              {bulkDisable.isPending ? "Turning Off..." : "Turn Off Selected"}
             </button>
             <select value={bulkScanProfileId} onChange={(event) => setBulkScanProfileId(event.target.value)} disabled={!selectedIds.length || bulkScanProfile.isPending}>
-              <option value="">Bulk Scan Profile</option>
+              <option value="">Set Sample Rate</option>
               {profilesQuery.data?.map((profile) => (
                 <option key={profile.scan_profile_id} value={profile.scan_profile_id}>
                   {profile.profile_name}
@@ -145,7 +166,7 @@ export function TagsPage(): JSX.Element {
               disabled={!selectedIds.length || bulkScanProfile.isPending}
               onClick={() => bulkScanProfile.mutate(bulkScanProfileId ? Number(bulkScanProfileId) : null)}
             >
-              {bulkScanProfile.isPending ? "Applying..." : "Apply Profile"}
+              {bulkScanProfile.isPending ? "Applying..." : "Set Sample Rate"}
             </button>
           </div>
         </div>
@@ -182,7 +203,7 @@ export function TagsPage(): JSX.Element {
             },
             {
               key: "enabled",
-              header: "Enabled",
+              header: "Collect",
               width: "90px",
               render: (row) => (
                 <input
@@ -192,10 +213,10 @@ export function TagsPage(): JSX.Element {
                 />
               ),
             },
-            { key: "tag_key", header: "Tag Key", width: "150px", render: (row) => row.tag_key },
+            { key: "tag_key", header: "Tag Code", width: "150px", render: (row) => row.tag_key },
             {
               key: "display_name",
-              header: "Display",
+              header: "Display Name",
               width: "180px",
               render: (row) => (
                 <input
@@ -204,11 +225,11 @@ export function TagsPage(): JSX.Element {
                 />
               ),
             },
-            { key: "opc_node_id", header: "Node ID", width: "260px", render: (row) => row.opc_node_id },
-            { key: "browse_path", header: "Browse Path", width: "220px", render: (row) => row.browse_path ?? "" },
+            { key: "opc_node_id", header: "OPC Node", width: "260px", render: (row) => row.opc_node_id },
+            { key: "browse_path", header: "Found In", width: "220px", render: (row) => row.browse_path ?? "" },
             {
               key: "folder_path",
-              header: "Folder",
+              header: "Folder Name",
               width: "180px",
               render: (row) => (
                 <input
@@ -219,7 +240,7 @@ export function TagsPage(): JSX.Element {
             },
             {
               key: "scan_profile_id",
-              header: "Scan",
+              header: "Sample Rate",
               width: "140px",
               render: (row) => (
                 <select
@@ -235,9 +256,9 @@ export function TagsPage(): JSX.Element {
                 </select>
               ),
             },
-            { key: "last_value", header: "Last Value", width: "110px", render: (row) => row.last_value ?? "" },
-            { key: "last_quality", header: "Quality", width: "100px", render: (row) => row.last_quality ?? "" },
-            { key: "status", header: "Status", width: "100px", render: (row) => row.status },
+            { key: "last_value", header: "Latest Value", width: "110px", render: (row) => row.last_value ?? "" },
+            { key: "last_quality", header: "Health", width: "100px", render: (row) => row.last_quality ?? "" },
+            { key: "status", header: "State", width: "100px", render: (row) => row.status },
             {
               key: "save",
               header: "Save",
@@ -250,7 +271,7 @@ export function TagsPage(): JSX.Element {
                     disabled={!hasDraft || patchTag.isPending}
                     onClick={() => patchTag.mutate({ tagId: row.tag_id, body: drafts[row.tag_id] ?? {} })}
                   >
-                    {savingTagId === row.tag_id && patchTag.isPending ? "Saving..." : "Save"}
+                    {savingTagId === row.tag_id && patchTag.isPending ? "Saving..." : "Save Changes"}
                   </button>
                 );
               },
