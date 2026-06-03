@@ -29,7 +29,7 @@ type DiscoverRequest = {
 const ROOT_TRAIL_ITEM: BrowseTrailItem = {
   nodeId: null,
   label: "Root / Objects",
-  browsePath: null,
+  browsePath: "Root.Objects",
 };
 
 function getFolderLabel(item: BrowseCacheItem): string {
@@ -69,7 +69,7 @@ export function BrowsePage(): JSX.Element {
           parsed.map((item) => ({
             nodeId: item.nodeId ?? null,
             label: item.label || ROOT_TRAIL_ITEM.label,
-            browsePath: item.browsePath ?? null,
+            browsePath: item.browsePath ?? (item.nodeId === null ? ROOT_TRAIL_ITEM.browsePath : null),
           })),
         );
       }
@@ -173,14 +173,14 @@ export function BrowsePage(): JSX.Element {
     Error,
     DiscoverRequest
   >({
-    mutationFn: ({ nodeId, label }) =>
+    mutationFn: ({ nodeId, label, browsePath }) =>
       apiFetch(`/api/machines/${machineId}/browse-tags`, {
         method: "POST",
         body: JSON.stringify({
           max_nodes: 500,
           max_depth: 1,
           root_node_id: nodeId,
-          root_label: label,
+          root_label: browsePath ?? label,
         }),
       }),
     onMutate: (variables) => beginOperation("discover", variables.label),
@@ -303,124 +303,6 @@ export function BrowsePage(): JSX.Element {
 
   return (
     <section className="page">
-      {operationState !== "idle" ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="browse-operation-title">
-          <div className={`modal-card modal-${operationState}`}>
-            <div className="modal-header">
-              <div>
-                <div className="brand-kicker">{operationKind === "discover" ? "Browse Folders" : "Add Tags"}</div>
-                <h3 id="browse-operation-title">
-                  {operationState === "running"
-                    ? operationKind === "discover"
-                      ? "Reading the machine..."
-                      : "Adding selected tags..."
-                    : operationState === "success"
-                      ? "Completed"
-                      : "Needs Attention"}
-                </h3>
-                <p className="modal-lead">
-                  {operationKind === "discover"
-                    ? "This is read-only discovery. It only looks at the machine and builds the folder list."
-                    : "This saves selected rows into the active tag list used by the collector."}
-                </p>
-              </div>
-              <div className={`status-pill status-pill-${operationState}`}>
-                {operationState === "running" ? "Working" : operationState === "success" ? "Done" : "Review"}
-              </div>
-            </div>
-            <div className="modal-body">
-              <div className={`modal-summary modal-summary-${operationState}`}>
-                <div className="modal-summary-title">{operationMessage}</div>
-                <div className="modal-summary-text">
-                  {operationState === "success"
-                    ? operationKind === "discover"
-                      ? "Folders and tags are ready. Open folders to go deeper or add the rows you want."
-                      : "Your selected tags are now in the active list."
-                    : operationState === "error"
-                      ? "Check the machine endpoint, folder path, or selected rows, then try again."
-                      : "The steps below will move one by one so you can follow along."}
-                </div>
-              </div>
-              <div className="step-grid">
-                <div className={`step-card ${operationStep >= 1 ? "step-active" : ""}`}>
-                  <div className="step-bullet">1</div>
-                  <div>
-                    <div className="step-title">{operationKind === "discover" ? "Connect to the machine" : "Prepare the selection"}</div>
-                    <div className="step-subtitle">
-                      {operationKind === "discover"
-                        ? "Open the read-only OPC session for the folder you picked."
-                        : "Gather the rows you selected and prepare them for the active list."}
-                    </div>
-                  </div>
-                </div>
-                <div className={`step-card ${operationStep >= 2 ? "step-active" : ""}`}>
-                  <div className="step-bullet">2</div>
-                  <div>
-                    <div className="step-title">{operationKind === "discover" ? "Walk the folder tree" : "Save active tags"}</div>
-                    <div className="step-subtitle">
-                      {operationKind === "discover"
-                        ? "Move through the selected folder and collect its children."
-                        : "Write the selected rows into the live tag list the collector uses."}
-                    </div>
-                  </div>
-                </div>
-                <div
-                  className={`step-card ${
-                    operationStep >= 3 ? (operationState === "success" ? "step-done" : operationState === "error" ? "step-error" : "step-active") : ""
-                  }`}
-                >
-                  <div className="step-bullet">3</div>
-                  <div>
-                    <div className="step-title">{operationKind === "discover" ? "Build the list" : "Refresh the tag view"}</div>
-                    <div className="step-subtitle">
-                      {operationKind === "discover"
-                        ? "Populate the discovered folder rows so you can keep drilling down."
-                        : "Refresh the active tag list after saving."}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="modal-actions">
-                {operationState === "error" ? (
-                  <button
-                    className="ghost-button"
-                    type="button"
-                    onClick={() => {
-                      if (operationKind === "discover") {
-                        discoverMutation.mutate({
-                          nodeId: currentRoot.nodeId,
-                          label: currentRoot.label,
-                          browsePath: currentRoot.browsePath,
-                        });
-                      } else {
-                        addMutation.mutate();
-                      }
-                    }}
-                  >
-                    Try Again
-                  </button>
-                ) : null}
-                {operationState !== "running" ? (
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={() => {
-                      setOperationState("idle");
-                      setOperationKind(null);
-                      setOperationStep(0);
-                      setOperationMessage("");
-                      resultRef.current = null;
-                    }}
-                  >
-                    Continue
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <div className="page-header">
         <div>
           <div className="brand-kicker">Step 1 of 2</div>
@@ -475,7 +357,34 @@ export function BrowsePage(): JSX.Element {
         </div>
       </div>
 
-      <div className="panel">
+      <div className="panel browse-panel-shell">
+        {operationState === "running" ? (
+          <div className="browse-overlay" aria-live="polite">
+            <div className="browse-overlay-card">
+              <div className="browse-overlay-top">
+                <div>
+                  <div className="brand-kicker">{operationKind === "discover" ? "Browsing folder" : "Adding tags"}</div>
+                  <div className="browse-overlay-title">{operationMessage}</div>
+                </div>
+                <div className="browse-overlay-pill">Working</div>
+              </div>
+              <div className="browse-overlay-steps">
+                <div className={`browse-overlay-step ${operationStep >= 1 ? "browse-overlay-step-active" : ""}`}>
+                  1. {operationKind === "discover" ? "Open folder" : "Prepare rows"}
+                </div>
+                <div className={`browse-overlay-step ${operationStep >= 2 ? "browse-overlay-step-active" : ""}`}>
+                  2. {operationKind === "discover" ? "Load children" : "Save active tags"}
+                </div>
+                <div
+                  className={`browse-overlay-step ${operationStep >= 3 ? "browse-overlay-step-active" : ""}`}
+                >
+                  3. {operationKind === "discover" ? "Show folders" : "Refresh list"}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {actionError ? <div className="error-text">{actionError}</div> : null}
         <div className="browse-summary">
           <div>
@@ -631,6 +540,46 @@ export function BrowsePage(): JSX.Element {
             <button className="ghost-button" onClick={() => clearMutation.mutate()} disabled={!canClear || clearMutation.isPending}>
               {clearMutation.isPending ? "Clearing..." : "Clear Cache"}
             </button>
+          </div>
+        ) : null}
+
+        {operationState !== "idle" && operationState !== "running" ? (
+          <div className={`browse-result-banner browse-result-banner-${operationState}`}>
+            <div className="browse-result-text">{operationMessage}</div>
+            <div className="browse-result-actions">
+              {operationState === "error" ? (
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => {
+                    if (operationKind === "discover") {
+                      discoverMutation.mutate({
+                        nodeId: currentRoot.nodeId,
+                        label: currentRoot.label,
+                        browsePath: currentRoot.browsePath,
+                      });
+                    } else {
+                      addMutation.mutate();
+                    }
+                  }}
+                >
+                  Try Again
+                </button>
+              ) : null}
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => {
+                  setOperationState("idle");
+                  setOperationKind(null);
+                  setOperationStep(0);
+                  setOperationMessage("");
+                  resultRef.current = null;
+                }}
+              >
+                Continue
+              </button>
+            </div>
           </div>
         ) : null}
 

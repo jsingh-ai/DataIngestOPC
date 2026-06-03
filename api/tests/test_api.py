@@ -144,7 +144,7 @@ async def test_add_tags_from_cache_and_reload(session):
         user="test-admin",
     )
     await machines.browse_tags(machine.machine_id, BrowseRequest(max_nodes=5), db=session, user="test-admin")
-    cache_items = browse.list_browse_cache(
+    root_cache_items = browse.list_browse_cache(
         machine.machine_id,
         db=session,
         page=1,
@@ -153,23 +153,35 @@ async def test_add_tags_from_cache_and_reload(session):
         folder_path=None,
         _="test-admin",
     ).items
-    folder_item = next(item for item in cache_items if not item.is_variable)
+    folder_item = next(item for item in root_cache_items if not item.is_variable)
     await machines.browse_tags(
         machine.machine_id,
         BrowseRequest(max_nodes=10, root_node_id=folder_item.opc_node_id, root_label=folder_item.browse_path),
         db=session,
         user="test-admin",
     )
-    cache_items = browse.list_browse_cache(
-        machine.machine_id,
-        db=session,
-        page=1,
-        page_size=100,
-        search=None,
-        folder_path=None,
-        _="test-admin",
-    ).items
-    variable_items = [item for item in cache_items if item.is_variable]
+    current_folder = folder_item
+    variable_items = []
+    for _ in range(3):
+        cache_items = browse.list_browse_cache(
+            machine.machine_id,
+            db=session,
+            page=1,
+            page_size=100,
+            search=None,
+            folder_path=current_folder.browse_path,
+            _="test-admin",
+        ).items
+        variable_items = [item for item in cache_items if item.is_variable]
+        if variable_items:
+            break
+        current_folder = next(item for item in cache_items if not item.is_variable)
+        await machines.browse_tags(
+            machine.machine_id,
+            BrowseRequest(max_nodes=10, root_node_id=current_folder.opc_node_id, root_label=current_folder.browse_path),
+            db=session,
+            user="test-admin",
+        )
     add_response = browse.add_tags_from_cache(
         machine.machine_id,
         AddTagsFromCacheRequest(

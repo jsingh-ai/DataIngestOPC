@@ -300,6 +300,119 @@ select {
   margin: 16px 0 12px;
 }
 
+.browse-panel-shell {
+  position: relative;
+}
+
+.browse-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  border-radius: 18px;
+  background: rgba(248, 252, 247, 0.74);
+  backdrop-filter: blur(3px);
+  display: grid;
+  place-items: start center;
+  padding: 18px;
+}
+
+.browse-overlay-card {
+  width: min(860px, 100%);
+  border-radius: 20px;
+  border: 1px solid rgba(16, 35, 29, 0.12);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 24px 70px rgba(14, 24, 19, 0.14);
+  padding: 16px 18px;
+}
+
+.browse-overlay-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.browse-overlay-title {
+  margin-top: 6px;
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: #17312b;
+}
+
+.browse-overlay-pill {
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: #e7eef7;
+  color: #1c3f63;
+  font-weight: 700;
+  font-size: 0.84rem;
+}
+
+.browse-overlay-steps {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.browse-overlay-step {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(16, 35, 29, 0.08);
+  background: #f7f9f6;
+  color: rgba(16, 35, 29, 0.72);
+}
+
+.browse-overlay-step-active {
+  background: #eef5fb;
+  border-color: #c9d9ea;
+  color: #1c3f63;
+}
+
+.browse-overlay-step-success {
+  background: #edf7ec;
+  border-color: #bfd8bd;
+  color: #1a4b22;
+}
+
+.browse-overlay-step-error {
+  background: #fdecec;
+  border-color: #e6bcbc;
+  color: #7c1f1f;
+}
+
+.browse-result-banner {
+  margin: 12px 0 0;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(16, 35, 29, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.browse-result-banner-success {
+  background: #edf7ec;
+  border-color: #bfd8bd;
+}
+
+.browse-result-banner-error {
+  background: #fdecec;
+  border-color: #e6bcbc;
+}
+
+.browse-result-text {
+  font-weight: 700;
+  color: #17312b;
+}
+
+.browse-result-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .browse-loading {
   margin: 14px 0;
   padding: 18px;

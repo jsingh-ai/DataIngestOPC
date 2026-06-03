@@ -13,6 +13,12 @@ from app.services.tag_service import slugify_tag_key
 router = APIRouter(tags=["browse"])
 
 
+def _direct_child_depth_filter(folder_path: str | None):
+    target_depth = (folder_path.count("/") if folder_path else 0) + 1
+    slash_count = func.length(TagBrowserCache.browse_path) - func.length(func.replace(TagBrowserCache.browse_path, "/", ""))
+    return slash_count == target_depth
+
+
 @router.get("/api/machines/{machine_id}/browse-cache", response_model=PaginatedResponse)
 def list_browse_cache(
     machine_id: int,
@@ -36,7 +42,10 @@ def list_browse_cache(
             )
         )
     if folder_path:
-        query = query.where(TagBrowserCache.browse_path.like(f"{folder_path}%"))
+        query = query.where(TagBrowserCache.browse_path.like(f"{folder_path}/%"))
+        query = query.where(_direct_child_depth_filter(folder_path))
+    else:
+        query = query.where(_direct_child_depth_filter(None))
     if is_variable is not None:
         query = query.where(TagBrowserCache.is_variable.is_(is_variable))
     if already_added is not None:

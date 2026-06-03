@@ -65,13 +65,13 @@ class MockOpcClient:
         if self.settings.mock_opc_slow_ms:
             await asyncio.sleep(self.settings.mock_opc_slow_ms / 1000)
         nodes: list[BrowseNode] = []
-        root_prefix = root_label or "Root / Objects"
+        root_prefix = root_label or "Root.Objects"
         if root_node_id is None:
             folder_names = ["PLC", "Modules", "Default", "Status", "Parameters"]
             for index, folder_name in enumerate(folder_names[: max_nodes]):
                 nodes.append(
                     BrowseNode(
-                        opc_node_id=f"ns=2;s={machine.machine_code}.{folder_name}",
+                        opc_node_id=f"ns=2;s=Root.Objects.{folder_name}",
                         browse_path=f"{root_prefix}/{folder_name}",
                         display_name=folder_name,
                         browse_name=folder_name,
@@ -82,32 +82,34 @@ class MockOpcClient:
                 )
             return nodes
 
-        folder_names = [f"Folder {index}" for index in range(1, min(5, max_nodes // 3 + 1))]
-        variable_count = max(0, min(self.settings.mock_opc_tag_count, max_nodes) - len(folder_names))
-        for index, folder_name in enumerate(folder_names):
+        root_level = root_label or root_node_id or ""
+        if "/Area" in root_level or ".Area" in root_level:
+            variable_count = min(self.settings.mock_opc_tag_count, max_nodes)
+            for index in range(variable_count):
+                nodes.append(
+                    BrowseNode(
+                        opc_node_id=f"{root_node_id}.Tag{index}",
+                        browse_path=f"{root_prefix}/Tag{index}",
+                        display_name=f"Tag {index}",
+                        browse_name=f"Tag{index}",
+                        node_class="Variable",
+                        data_type="Double" if index % 2 == 0 else "Boolean",
+                        is_variable=True,
+                    )
+                )
+            return nodes
+
+        area_names = [f"Area {index}" for index in range(0, min(5, max_nodes))]
+        for index, area_name in enumerate(area_names):
             nodes.append(
                 BrowseNode(
-                    opc_node_id=f"{root_node_id}.Group{index}",
-                    browse_path=f"{root_prefix}/{folder_name}",
-                    display_name=folder_name,
-                    browse_name=folder_name.replace(" ", ""),
+                    opc_node_id=f"{root_node_id}.Area{index}",
+                    browse_path=f"{root_prefix}/{area_name.replace(' ', '')}",
+                    display_name=area_name,
+                    browse_name=area_name.replace(" ", ""),
                     node_class="Object",
                     data_type=None,
                     is_variable=False,
-                )
-            )
-        for index in range(variable_count):
-            folder = f"Area{index % max(1, min(max_depth, 8))}"
-            browse_path = f"{root_prefix}/{folder}/Tag{index}"
-            nodes.append(
-                BrowseNode(
-                    opc_node_id=f"{root_node_id}.Tag{index}",
-                    browse_path=browse_path,
-                    display_name=f"Tag {index}",
-                    browse_name=f"Tag{index}",
-                    node_class="Variable",
-                    data_type="Double" if index % 2 == 0 else "Boolean",
-                    is_variable=True,
                 )
             )
         return nodes
