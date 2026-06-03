@@ -10,14 +10,12 @@ export function BrowsePage(): JSX.Element {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
-  const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
   const queryString = useMemo(() => {
     const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
-    if (search) params.set("search", search);
     return params.toString();
-  }, [page, pageSize, search]);
+  }, [page, pageSize]);
 
   const browseQuery = useQuery({
     queryKey: ["browse-cache", machineId, queryString],
@@ -73,12 +71,10 @@ export function BrowsePage(): JSX.Element {
           <div className="brand-kicker">Step 1 of 2</div>
           <h2>Discover Tags</h2>
           <p className="page-lead">
-            This page reads the machine and shows what tags exist. Nothing is added yet. Pick the ones you want, then add them to the active tag list.
+            Click Discover Tags to read the machine. This shows what exists on the PLC. Nothing is added until you select rows and add them to the active tag list.
           </p>
         </div>
         <div className="action-row">
-          <input value={search} placeholder="Search discovered tags" onChange={(event) => setSearch(event.target.value)} />
-          <button className="ghost-button" onClick={() => browseQuery.refetch()}>Refresh List</button>
           <button className="ghost-button" onClick={() => refreshMutation.mutate()} disabled={refreshMutation.isPending}>
             {refreshMutation.isPending ? "Scanning..." : "Discover Tags"}
           </button>
@@ -110,6 +106,25 @@ export function BrowsePage(): JSX.Element {
       </div>
       <div className="panel">
         {actionError ? <div className="error-text">{actionError}</div> : null}
+        <div className="browse-summary">
+          <div>
+            <div className="browse-summary-label">Found</div>
+            <div className="browse-summary-value">{browseQuery.data?.total ?? 0} nodes</div>
+          </div>
+          <div>
+            <div className="browse-summary-label">Selected</div>
+            <div className="browse-summary-value">{selectedIds.length} rows</div>
+          </div>
+          <div>
+            <div className="browse-summary-label">Tip</div>
+            <div className="browse-summary-value">Use the path and node ID to decide what to add.</div>
+          </div>
+        </div>
+        {!(browseQuery.data?.total ?? 0) ? (
+          <div className="browse-empty">
+            No discovered tags yet. Click <strong>Discover Tags</strong> to read the machine and populate this list.
+          </div>
+        ) : null}
         <VirtualTable
           rows={browseQuery.data?.items ?? []}
           columns={[
@@ -129,9 +144,9 @@ export function BrowsePage(): JSX.Element {
                 />
               ),
             },
-            { key: "browse_path", header: "Browse Path", width: "260px", render: (row) => row.browse_path ?? "" },
+            { key: "browse_path", header: "Folder / Path", width: "260px", render: (row) => row.browse_path ?? "" },
             { key: "opc_node_id", header: "Node ID", width: "280px", render: (row) => row.opc_node_id },
-            { key: "display_name", header: "Display", width: "160px", render: (row) => row.display_name ?? "" },
+            { key: "display_name", header: "Name", width: "160px", render: (row) => row.display_name ?? "" },
             { key: "browse_name", header: "Browse Name", width: "140px", render: (row) => row.browse_name ?? "" },
             { key: "node_class", header: "Class", width: "110px", render: (row) => row.node_class ?? "" },
             { key: "data_type", header: "Type", width: "110px", render: (row) => row.data_type ?? "" },

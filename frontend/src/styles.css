@@ -183,6 +183,35 @@ select {
   gap: 14px;
 }
 
+.browse-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.browse-summary-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: rgba(16, 35, 29, 0.58);
+  margin-bottom: 6px;
+}
+
+.browse-summary-value {
+  font-weight: 800;
+  color: #17312b;
+}
+
+.browse-empty {
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  border: 1px dashed rgba(16, 35, 29, 0.18);
+  background: rgba(255, 255, 255, 0.55);
+  color: rgba(16, 35, 29, 0.76);
+}
+
 .machine-group {
   border-radius: 18px;
   overflow: hidden;
