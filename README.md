@@ -8,11 +8,11 @@ Use this repo to:
 - collect samples into Azure MySQL
 - view machine health and current values in a dashboard
 
-The default path below assumes the repo is at:
+The examples below assume you cloned the repo into:
 
-`C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform`
+`C:\Users\jsingh\Desktop\DATAINGESTOPC`
 
-If your path is different, replace it in the commands.
+There is no extra `opc-platform` folder in that layout. If your clone is somewhere else, set `REPO_ROOT` to that folder and use it in the commands below.
 
 ## What You Need
 
@@ -28,16 +28,18 @@ Docker is optional. Use it only if your Windows VM can run Docker Desktop correc
 ### 1) Install Python packages
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
-python -m venv C:\Users\jsingh\Desktop\DataIngestOPC\.venv
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\pip.exe install -r requirements.txt
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%"
+py -3.12 -m venv "%REPO_ROOT%\.venv"
+"%REPO_ROOT%\.venv\Scripts\pip.exe" install -r requirements.txt
 ```
 
 ### 2) Create `.env` for Azure MySQL
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\create_env.py --mode azure --interactive --output .env --overwrite
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%"
+"%REPO_ROOT%\.venv\Scripts\python.exe" scripts\create_env.py --mode azure --interactive --output .env --overwrite
 ```
 
 Fill in:
@@ -53,21 +55,25 @@ Fill in:
 ### 3) Check the database
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\check_db.py
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%"
+"%REPO_ROOT%\.venv\Scripts\python.exe" scripts\check_db.py
 ```
 
 ### 4) Create tables and seed defaults
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\init_db.py --migrate --seed
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%"
+"%REPO_ROOT%\.venv\Scripts\python.exe" scripts\init_db.py --migrate --seed
 ```
 
 If the Azure database does not exist yet and your user is allowed to create it:
 
 ```cmd
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\init_db.py --create-database --migrate --seed
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%"
+"%REPO_ROOT%\.venv\Scripts\python.exe" scripts\init_db.py --create-database --migrate --seed
 ```
 
 ### 5) Start the API
@@ -75,8 +81,9 @@ C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\init_db.p
 Open a new Command Prompt window:
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform\api
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%\api"
+"%REPO_ROOT%\.venv\Scripts\python.exe" -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 ### 6) Start the collector
@@ -84,8 +91,9 @@ C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe -m uvicorn app.ma
 Open a second Command Prompt window:
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform\collector
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe -m collector.main
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%\collector"
+"%REPO_ROOT%\.venv\Scripts\python.exe" -m collector.main
 ```
 
 ### 7) Start the frontend
@@ -93,7 +101,8 @@ C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe -m collector.main
 Open a third Command Prompt window:
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform\frontend
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%\frontend"
 npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
@@ -123,8 +132,9 @@ Log in with the admin username and password from `.env`.
 Use this when you want to test a machine before adding it in the dashboard:
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\test_opc_connection.py --force-real --endpoint opc.tcp://10.0.0.10:4840 --username opc_reader --node-id ns=2;s=Machine.Tag1
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%"
+"%REPO_ROOT%\.venv\Scripts\python.exe" scripts\test_opc_connection.py --force-real --endpoint opc.tcp://10.0.0.10:4840 --username opc_reader --node-id ns=2;s=Machine.Tag1
 ```
 
 If you do not pass `--password`, the script prompts securely.
@@ -153,11 +163,12 @@ Use this order:
 Only use this if Docker Desktop works on the machine.
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\create_env.py --mode local --overwrite
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%"
+"%REPO_ROOT%\.venv\Scripts\python.exe" scripts\create_env.py --mode local --overwrite
 docker compose up -d mysql
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\check_db.py
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\init_db.py --migrate --seed
+"%REPO_ROOT%\.venv\Scripts\python.exe" scripts\check_db.py
+"%REPO_ROOT%\.venv\Scripts\python.exe" scripts\init_db.py --migrate --seed
 ```
 
 ## Collector Behavior
@@ -176,14 +187,17 @@ It can browse and read tags only.
 ## Run Checks
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\run_all_checks.py --mode azure
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%"
+"%REPO_ROOT%\.venv\Scripts\python.exe" scripts\run_all_checks.py --mode azure
 ```
 
 If Docker works and you want to use the local container path instead:
 
 ```cmd
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\run_all_checks.py --mode local-docker
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%"
+"%REPO_ROOT%\.venv\Scripts\python.exe" scripts\run_all_checks.py --mode local-docker
 ```
 
 ## Troubleshooting

@@ -7,48 +7,57 @@ Use this checklist for the first real PLC or OPC UA machine. Keep the initial sc
 1. Create `.env`
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\create_env.py --mode azure --interactive --output .env --overwrite
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%"
+"%REPO_ROOT%\.venv\Scripts\python.exe" scripts\create_env.py --mode azure --interactive --output .env --overwrite
 ```
 
 2. Verify DB connectivity
 
 ```cmd
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\check_db.py
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%"
+"%REPO_ROOT%\.venv\Scripts\python.exe" scripts\check_db.py
 ```
 
 3. Initialize schema and defaults
 
 ```cmd
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\init_db.py --migrate --seed
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%"
+"%REPO_ROOT%\.venv\Scripts\python.exe" scripts\init_db.py --migrate --seed
 ```
 
 4. Start API
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform\api
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%\api"
+"%REPO_ROOT%\.venv\Scripts\python.exe" -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 5. Start collector
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform\collector
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe -m collector.main
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%\collector"
+"%REPO_ROOT%\.venv\Scripts\python.exe" -m collector.main
 ```
 
 6. Start frontend
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform\frontend
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%\frontend"
 npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
 7. Validate the OPC endpoint directly before using the dashboard
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\test_opc_connection.py --force-real --endpoint opc.tcp://10.0.0.10:4840 --security-policy Basic256Sha256 --security-mode SignAndEncrypt --username opc_reader --browse --node-id ns=2;s=Machine.Tag1
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%"
+"%REPO_ROOT%\.venv\Scripts\python.exe" scripts\test_opc_connection.py --force-real --endpoint opc.tcp://10.0.0.10:4840 --security-policy Basic256Sha256 --security-mode SignAndEncrypt --username opc_reader --browse --node-id ns=2;s=Machine.Tag1
 ```
 
 8. Add the machine in the dashboard.
@@ -60,8 +69,9 @@ C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\test_opc_
 14. Verify `tag_current_value` rows exist.
 
 ```cmd
-cd /d C:\Users\jsingh\Desktop\DataIngestOPC\opc-platform
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\verify_first_machine_data.py --machine-code YOUR_MACHINE_CODE
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+cd /d "%REPO_ROOT%"
+"%REPO_ROOT%\.venv\Scripts\python.exe" scripts\verify_first_machine_data.py --machine-code YOUR_MACHINE_CODE
 ```
 
 15. Let the system run for 15 minutes.
@@ -86,13 +96,15 @@ C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe scripts\verify_fi
 4. Inspect the SQLite buffer file configured by `COLLECTOR_SQLITE_PATH`.
 
 ```cmd
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe -c "import sqlite3; con = sqlite3.connect(r'C:\path\to\opc_buffer.sqlite'); print(con.execute('SELECT COUNT(*) FROM buffer_samples').fetchone()[0]); con.close()"
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+"%REPO_ROOT%\.venv\Scripts\python.exe" -c "import sqlite3; con = sqlite3.connect(r'C:\path\to\opc_buffer.sqlite'); print(con.execute('SELECT COUNT(*) FROM buffer_samples').fetchone()[0]); con.close()"
 ```
 
 5. If needed, inspect the newest buffered rows before restart.
 
 ```cmd
-C:\Users\jsingh\Desktop\DataIngestOPC\.venv\Scripts\python.exe -c "import sqlite3; con = sqlite3.connect(r'C:\path\to\opc_buffer.sqlite'); rows = con.execute('SELECT buffer_id, machine_id, tag_id, created_at, last_flush_error FROM buffer_samples ORDER BY buffer_id DESC LIMIT 20').fetchall(); print(rows); con.close()"
+set "REPO_ROOT=C:\Users\jsingh\Desktop\DATAINGESTOPC"
+"%REPO_ROOT%\.venv\Scripts\python.exe" -c "import sqlite3; con = sqlite3.connect(r'C:\path\to\opc_buffer.sqlite'); rows = con.execute('SELECT buffer_id, machine_id, tag_id, created_at, last_flush_error FROM buffer_samples ORDER BY buffer_id DESC LIMIT 20').fetchall(); print(rows); con.close()"
 ```
 
 6. Restart the collector after the machine is disabled or after the DB issue is corrected.

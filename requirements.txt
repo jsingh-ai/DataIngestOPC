@@ -3,8 +3,8 @@
 # Use Python 3.12 for the venv on Windows. Python 3.14 has shown
 # compatibility issues with asyncua in this project.
 #
-# Install into a fresh virtualenv:
-#   python -m venv .venv
+# Install into a fresh virtualenv with Python 3.12:
+#   py -3.12 -m venv .venv
 #   .venv/bin/pip install -r requirements.txt
 #
 # This file covers the API, collector, scripts, and local test tooling.
