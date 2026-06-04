@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "opc-platform-api"
 version = "0.1.0"
-requires-python = ">=3.11"
+requires-python = ">=3.12,<3.14"
 dependencies = [
   "alembic>=1.13.1",
   "cryptography>=42.0.0",
@@ -35,12 +35,12 @@ where = ["."]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 plugins = []
