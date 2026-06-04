@@ -4,6 +4,16 @@ import { Link } from "react-router-dom";
 import { apiFetch } from "../api/client";
 import type { Machine, PaginatedResponse } from "../types/api";
 
+function getSetupBadge(machine: Machine): { label: string; kind: "success" | "warning" | "muted" } {
+  if (machine.status === "connection_tested") {
+    return { label: "Setup tested", kind: "success" };
+  }
+  if (machine.status === "error") {
+    return { label: "Setup needs attention", kind: "warning" };
+  }
+  return { label: "Setup draft", kind: "muted" };
+}
+
 export function MachinesPage(): JSX.Element {
   const queryClient = useQueryClient();
   const machinesQuery = useQuery({
@@ -15,6 +25,33 @@ export function MachinesPage(): JSX.Element {
       apiFetch(`/api/machines/${machine.machine_id}/${machine.enabled ? "disable" : "enable"}`, { method: "POST" }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["machines"] });
+    },
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (machineId: number) => apiFetch(`/api/machines/${machineId}`, { method: "DELETE" }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["machines"] });
+    },
+  });
+  const testMutation = useMutation({
+    mutationFn: (machine: Machine) =>
+      apiFetch<{ success: boolean; message: string; attempt_id?: string | null; debug_log?: string[] }>(
+        `/api/machines/${machine.machine_id}/test-connection`,
+        { method: "POST" },
+      ),
+    onSuccess: (result, machine) => {
+      window.alert(
+        [
+          `Test result for ${machine.display_name}: ${result.success ? "success" : "failure"}`,
+          result.message,
+          result.attempt_id ? `attempt_id=${result.attempt_id}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+    },
+    onError: (error) => {
+      window.alert((error as Error).message || "Connection test failed.");
     },
   });
 
@@ -100,6 +137,7 @@ export function MachinesPage(): JSX.Element {
                     <th>Discover</th>
                     <th>Manage Tags</th>
                     <th>Machine On/Off</th>
+                    <th>Delete</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -119,6 +157,9 @@ export function MachinesPage(): JSX.Element {
                           {machine.online_status === "online" ? "Online" : "Offline"}
                         </span>
                         <div className="subtle-cell">{machine.status}</div>
+                        <div className="machine-health-row">
+                          <span className={`status-chip status-chip-${getSetupBadge(machine).kind}`}>{getSetupBadge(machine).label}</span>
+                        </div>
                       </td>
                       <td>{machine.tag_count}</td>
                       <td>{machine.last_heartbeat_ts_utc ?? "Not yet seen"}</td>
@@ -141,10 +182,33 @@ export function MachinesPage(): JSX.Element {
                         <div className="cell-note">Rename tags here and choose how often they should be read.</div>
                       </td>
                       <td className="action-cell action-cell-single">
+                        <button className="row-action-button" onClick={() => testMutation.mutate(machine)}>
+                          Test connection
+                        </button>
+                        <div className="cell-note">Checks the PLC before you browse tags.</div>
+                      </td>
+                      <td className="action-cell action-cell-single">
                         <button className="row-action-button" onClick={() => toggleMutation.mutate(machine)}>
                           {machine.enabled ? "Pause collection" : "Start collection"}
                         </button>
                         <div className="cell-note">This turns collection on or off for the whole machine.</div>
+                      </td>
+                      <td className="action-cell action-cell-single">
+                        <button
+                          className="danger-button"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Delete machine ${machine.display_name}? This also deletes its tags, browse cache, and collection status.`,
+                              )
+                            ) {
+                              deleteMutation.mutate(machine.machine_id);
+                            }
+                          }}
+                        >
+                          Delete Machine
+                        </button>
+                        <div className="cell-note">This permanently removes the machine and its related records.</div>
                       </td>
                     </tr>
                   ))}

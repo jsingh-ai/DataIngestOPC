@@ -19,8 +19,12 @@ app.add_middleware(
 
 
 @app.get("/api/healthz")
-def healthz() -> dict[str, str]:
-    return {"status": "ok"}
+def healthz() -> dict[str, object]:
+    return {
+        "status": "ok",
+        "app_env": settings.app_env,
+        "use_mock_opc": settings.use_mock_opc,
+    }
 
 
 @app.post("/api/auth/login", response_model=TokenResponse)

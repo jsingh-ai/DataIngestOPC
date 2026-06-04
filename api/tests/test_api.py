@@ -3,7 +3,7 @@ from fastapi import HTTPException
 
 from app.auth import get_current_user
 from app.config import get_settings
-from app.models import CollectorConfigState
+from app.models import CollectorConfigState, Machine, TagDefinition
 from app.security import decrypt_secret, encrypt_secret, hash_password, verify_password
 from app.routers import browse, collector, machines, tags
 from app.schemas import AddTagsFromCacheRequest, BrowseRequest, MachineCreate, MachineUpdate, TagCreate
@@ -50,6 +50,38 @@ def test_machine_crud_and_password_hidden(session):
         user="test-admin",
     )
     assert updated.display_name == "Updated"
+
+
+def test_machine_delete_removes_dependents(session):
+    machine = machines.create_machine_route(
+        MachineCreate(
+            machine_code="MDEL",
+            display_name="Machine Delete",
+            ip_address="10.0.0.9",
+            port=4840,
+            opc_endpoint="opc.tcp://10.0.0.9:4840",
+            enabled=True,
+        ),
+        db=session,
+        user="test-admin",
+    )
+    tag = tags.create_tag_route(
+        machine.machine_id,
+        TagCreate(
+            tag_key="tag_delete",
+            display_name="Tag Delete",
+            opc_node_id="ns=2;s=MDEL.Tag1",
+            enabled=True,
+        ),
+        db=session,
+        user="test-admin",
+    )
+    delete_response = machines.delete_machine(machine.machine_id, db=session, user="test-admin")
+    assert delete_response["deleted"] == 1
+    assert delete_response["machine_id"] == machine.machine_id
+    assert delete_response["tag_count"] == 1
+    assert session.get(Machine, machine.machine_id) is None
+    assert session.get(TagDefinition, tag.tag_id) is None
 
 
 def test_tag_crud_and_pagination(session):

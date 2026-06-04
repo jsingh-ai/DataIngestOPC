@@ -76,6 +76,8 @@ class ConnectionTestResponse(BaseModel):
     success: bool
     message: str
     machine_status: str
+    attempt_id: str | None = None
+    debug_log: list[str] = Field(default_factory=list)
 
 
 class BrowseRequest(BaseModel):

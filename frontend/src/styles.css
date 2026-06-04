@@ -91,6 +91,59 @@ select {
   flex-wrap: wrap;
 }
 
+.machine-form-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.machine-form-actions-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: min(100%, 260px);
+}
+
+.machine-form-actions-group-end {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.machine-form-actions-note {
+  color: rgba(16, 35, 29, 0.68);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.machine-form-actions-note-danger {
+  color: #7c1f1f;
+}
+
+.machine-setup-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(16, 35, 29, 0.08);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.machine-setup-banner-text {
+  color: rgba(16, 35, 29, 0.72);
+  line-height: 1.4;
+}
+
+.machine-health-row {
+  margin-top: 6px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .panel {
   background: rgba(255, 255, 255, 0.78);
   border: 1px solid rgba(16, 35, 29, 0.1);
@@ -124,6 +177,19 @@ select {
 .action-cell button {
   background: #d4e0d4;
   color: #17312b;
+}
+
+.danger-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 16px;
+  cursor: pointer;
+  background: #f4d6d6;
+  color: #7c1f1f;
+}
+
+.danger-button:hover {
+  background: #efc4c4;
 }
 
 .row-action-button {
@@ -200,9 +266,10 @@ select {
 
 .browse-discovery-actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 8px;
-  align-items: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .browse-discover-button {
@@ -940,6 +1007,52 @@ select {
 .step-subtitle {
   color: rgba(16, 35, 29, 0.72);
   line-height: 1.4;
+}
+
+.modal-log-panel {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(16, 35, 29, 0.08);
+  background: #f7f9f6;
+}
+
+.modal-log-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-log-title {
+  font-weight: 800;
+  font-size: 1rem;
+}
+
+.modal-log-subtitle {
+  margin-top: 4px;
+  color: rgba(16, 35, 29, 0.68);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.modal-log-box {
+  max-height: 240px;
+  overflow: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(16, 35, 29, 0.12);
+  background: #0f1f1a;
+  color: #d7e6df;
+  padding: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.modal-log-line {
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .modal-message {

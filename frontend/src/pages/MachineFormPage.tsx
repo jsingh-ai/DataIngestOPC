@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiFetch } from "../api/client";
@@ -43,6 +43,31 @@ function normalizeOptional(value: string) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function buildConnectionTestDebugLog(params: {
+  machineId: string | undefined;
+  isEdit: boolean;
+  endpoint: string;
+  form: MachineFormValues;
+  securityPolicy?: string | null;
+  securityMode?: string | null;
+  passwordSource: string;
+}): string[] {
+  return [
+    `mode=${params.isEdit ? "existing-machine-test" : "new-machine-test"}`,
+    `machine_id=${params.machineId ?? "<new>"}`,
+    `endpoint=${params.endpoint}`,
+    `ip_address=${params.form.ip_address.trim() || "<blank>"}`,
+    `port=${params.form.port}`,
+    `machine_code=${params.form.machine_code.trim() || "<auto>"}`,
+    `display_name=${params.form.display_name.trim() || "<blank>"}`,
+    `opc_username=${params.form.opc_username.trim() || "<blank>"}`,
+    `opc_password_present=${String(Boolean(params.form.opc_password.trim())).toLowerCase()}`,
+    `password_source=${params.passwordSource}`,
+    `security_policy=${params.securityPolicy ?? "<none>"}`,
+    `security_mode=${params.securityMode ?? "<none>"}`,
+  ];
+}
+
 export function MachineFormPage(): JSX.Element {
   const { machineId } = useParams();
   const isEdit = Boolean(machineId);
@@ -60,7 +85,8 @@ export function MachineFormPage(): JSX.Element {
   const [testState, setTestState] = useState<TestState>("idle");
   const [testMessage, setTestMessage] = useState<string>("");
   const [testStep, setTestStep] = useState<TestStep>(0);
-  const outcomeRef = useRef<{ success: boolean; message: string } | null>(null);
+  const [testDebugLog, setTestDebugLog] = useState<string[]>([]);
+  const [showDebugLog, setShowDebugLog] = useState(false);
 
   useEffect(() => {
     if (!isEdit || !machineQuery.data || prefilled) {
@@ -131,28 +157,74 @@ export function MachineFormPage(): JSX.Element {
       pushToast("error", (error as Error).message || "Failed to save machine.");
     },
   });
+  const deleteMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/machines/${machineId}`, { method: "DELETE" }),
+    onSuccess: async () => {
+      pushToast("success", "Machine deleted.");
+      await queryClient.invalidateQueries({ queryKey: ["machines"] });
+      await queryClient.invalidateQueries({ queryKey: ["machine", machineId] });
+      navigate("/machines");
+    },
+    onError: (error) => {
+      pushToast("error", (error as Error).message || "Failed to delete machine.");
+    },
+  });
 
   const testMutation = useMutation({
     mutationFn: () =>
       isEdit
-        ? apiFetch<{ success: boolean; message: string }>(`/api/machines/${machineId}/test-connection`, {
-            method: "POST",
-          })
-        : apiFetch<{ success: boolean; message: string }>("/api/machines/test-connection", {
-            method: "POST",
-            body: JSON.stringify(createPayload),
-          }),
+        ? apiFetch<{ success: boolean; message: string; attempt_id?: string | null; debug_log?: string[] }>(
+            `/api/machines/${machineId}/test-connection`,
+            {
+              method: "POST",
+            },
+          )
+        : apiFetch<{ success: boolean; message: string; attempt_id?: string | null; debug_log?: string[] }>(
+            "/api/machines/test-connection",
+            {
+              method: "POST",
+              body: JSON.stringify(createPayload),
+            },
+          ),
     onMutate: () => {
       setTestState("running");
       setTestStep(1);
       setTestMessage("Starting connection check...");
-      outcomeRef.current = null;
+      setShowDebugLog(false);
+      setTestDebugLog(
+        buildConnectionTestDebugLog({
+          machineId,
+          isEdit,
+          endpoint,
+          form,
+          securityPolicy: savedMachine?.security_policy ?? null,
+          securityMode: savedMachine?.security_mode ?? null,
+          passwordSource: isEdit ? "stored-password-on-server" : form.opc_password.trim() ? "entered-password" : "no-password",
+        }),
+      );
     },
     onSuccess: (result) => {
-      outcomeRef.current = { success: Boolean(result.success), message: result.message };
+      setTestStep(3);
+      setConnectionTested(Boolean(result.success));
+      setTestState(result.success ? "success" : "error");
+      setTestMessage(result.message);
+      setTestDebugLog((current) => [
+        ...current,
+        `attempt_id=${result.attempt_id ?? "<none>"}`,
+        ...(result.debug_log ?? []).map((line) => `backend.${line}`),
+        `result=${result.success ? "success" : "error"}`,
+      ]);
+      pushToast(result.success ? "success" : "error", result.message);
     },
     onError: (error) => {
-      outcomeRef.current = { success: false, message: (error as Error).message || "Connection test failed." };
+      const message = (error as Error).message || "Connection test failed.";
+      setTestStep(3);
+      setConnectionTested(false);
+      setTestState("error");
+      setTestMessage(message);
+      setShowDebugLog(true);
+      setTestDebugLog((current) => [...current, `result=error`, `error=${message}`]);
+      pushToast("error", message);
     },
   });
 
@@ -162,8 +234,6 @@ export function MachineFormPage(): JSX.Element {
     }
     let step2Timer: number | undefined;
     let step3Timer: number | undefined;
-    let finishTimer: number | undefined;
-
     step2Timer = window.setTimeout(() => {
       setTestStep(2);
       setTestMessage("Opening the OPC UA session...");
@@ -174,30 +244,12 @@ export function MachineFormPage(): JSX.Element {
       setTestMessage("Checking read access and confirming it is safe to add...");
     }, 1250);
 
-    finishTimer = window.setTimeout(() => {
-      const outcome = outcomeRef.current;
-      if (!outcome) {
-        setTestState("error");
-        setConnectionTested(false);
-        setTestMessage("The connection test did not return a result.");
-        pushToast("error", "The connection test did not return a result.");
-        return;
-      }
-      setConnectionTested(outcome.success);
-      setTestState(outcome.success ? "success" : "error");
-      setTestMessage(outcome.message);
-      pushToast(outcome.success ? "success" : "error", outcome.message);
-    }, 1900);
-
     return () => {
       if (step2Timer) {
         window.clearTimeout(step2Timer);
       }
       if (step3Timer) {
         window.clearTimeout(step3Timer);
-      }
-      if (finishTimer) {
-        window.clearTimeout(finishTimer);
       }
     };
   }, [testState]);
@@ -217,9 +269,37 @@ export function MachineFormPage(): JSX.Element {
     }
   }
 
+  async function copyDebugLog() {
+    const text = testDebugLog.join("\n");
+    if (!text) {
+      pushToast("info", "No debug log to copy.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      pushToast("success", "Debug log copied to clipboard.");
+    } catch {
+      pushToast("error", "Unable to copy debug log.");
+    }
+  }
+
   const saveDisabled = !connectionTested || saveMutation.isPending;
   const testDisabled = testMutation.isPending;
   const showTestModal = testState !== "idle";
+  const setupStatusLabel = savedMachine
+    ? savedMachine.status === "connection_tested"
+      ? "Setup tested"
+      : savedMachine.status === "error"
+        ? "Setup needs attention"
+        : "Setup draft"
+    : "New setup";
+  const setupStatusKind = savedMachine
+    ? savedMachine.status === "connection_tested"
+      ? "success"
+      : savedMachine.status === "error"
+        ? "warning"
+        : "muted"
+    : "muted";
 
   return (
     <section className="page">
@@ -231,6 +311,13 @@ export function MachineFormPage(): JSX.Element {
         <Link className="ghost-button" to="/machines">
           Back
         </Link>
+      </div>
+
+      <div className="machine-setup-banner">
+        <span className={`status-chip status-chip-${setupStatusKind}`}>{setupStatusLabel}</span>
+        <span className="machine-setup-banner-text">
+          Test the connection before you browse tags. If the saved OPC password was changed in `.env`, re-enter it here first.
+        </span>
       </div>
 
       <div className="toast-stack" aria-live="polite" aria-atomic="true">
@@ -298,6 +385,36 @@ export function MachineFormPage(): JSX.Element {
                 </div>
               </div>
 
+              <div className="modal-log-panel">
+                <div className="modal-log-header">
+                  <div>
+                    <div className="modal-log-title">Debug Log</div>
+                    <div className="modal-log-subtitle">Sanitized request and backend details for this test attempt.</div>
+                  </div>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => setShowDebugLog((current) => !current)}
+                  >
+                    {showDebugLog ? "Hide Details" : "Show Details"}
+                  </button>
+                </div>
+                {showDebugLog ? (
+                  <>
+                    <div className="modal-log-box" role="log" aria-label="Connection test debug log">
+                      {testDebugLog.map((line, index) => (
+                        <div key={`${index}-${line}`} className="modal-log-line">
+                          {line}
+                        </div>
+                      ))}
+                    </div>
+                    <button className="ghost-button" type="button" onClick={() => void copyDebugLog()}>
+                      Copy Log
+                    </button>
+                  </>
+                ) : null}
+              </div>
+
               <div className="modal-actions">
                 {testState === "error" ? (
                   <button
@@ -325,6 +442,8 @@ export function MachineFormPage(): JSX.Element {
                       setTestState("idle");
                       setTestMessage("");
                       setTestStep(0);
+                      setTestDebugLog([]);
+                      setShowDebugLog(false);
                     }}
                   >
                     Edit Details
@@ -449,10 +568,36 @@ export function MachineFormPage(): JSX.Element {
           </div>
         </div>
 
-        <div className="action-row">
-          <button className="primary-button" type="submit" disabled={testDisabled}>
-            {testMutation.isPending ? "Testing..." : "Test Connection"}
-          </button>
+        <div className="machine-form-actions">
+          <div className="machine-form-actions-group">
+            <button className="primary-button" type="submit" disabled={testDisabled}>
+              {testMutation.isPending ? "Testing..." : "Test Connection"}
+            </button>
+            <div className="machine-form-actions-note">Use this before browsing tags or saving a changed endpoint.</div>
+          </div>
+          {isEdit ? (
+            <div className="machine-form-actions-group machine-form-actions-group-end">
+              <button
+                className="danger-button"
+                type="button"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Delete machine ${savedMachine?.display_name ?? "this machine"}? This also deletes tags, browse cache, and collection status.`,
+                    )
+                  ) {
+                    deleteMutation.mutate();
+                  }
+                }}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? "Deleting..." : "Delete Machine"}
+              </button>
+              <div className="machine-form-actions-note machine-form-actions-note-danger">
+                Removes the machine and all dependent records.
+              </div>
+            </div>
+          ) : null}
         </div>
       </form>
     </section>

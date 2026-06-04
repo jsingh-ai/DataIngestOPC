@@ -3,16 +3,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+from uuid import uuid4
 from datetime import UTC, datetime
 from collections.abc import Coroutine
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.db import get_db
-from app.models import Machine, MachineCollectionStatus, TagBrowserCache, TagDefinition
+from app.models import ConfigAuditLog, Machine, MachineCollectionStatus, TagBrowserCache, TagCollectionStatus, TagDefinition
 from app.schemas import (
     BrowseRequest,
     BrowseSummaryResponse,
@@ -35,6 +36,35 @@ from app.services.opcua_service import get_opc_service
 
 router = APIRouter(prefix="/api/machines", tags=["machines"])
 logger = logging.getLogger("opc_platform.api.machines")
+
+
+def _connection_test_debug_log(
+    *,
+    attempt_id: str,
+    machine_code: str,
+    endpoint: str,
+    ip_address: str,
+    port: int,
+    opc_username: str | None,
+    security_policy: str | None,
+    security_mode: str | None,
+    use_mock_opc: bool,
+    password_present: bool,
+    credential_source: str,
+) -> list[str]:
+    return [
+        f"attempt_id={attempt_id}",
+        f"mode={'mock' if use_mock_opc else 'real'}",
+        f"machine_code={machine_code}",
+        f"endpoint={endpoint}",
+        f"ip_address={ip_address}",
+        f"port={port}",
+        f"opc_username={opc_username or '<blank>'}",
+        f"password_present={str(password_present).lower()}",
+        f"credential_source={credential_source}",
+        f"security_policy={security_policy or '<none>'}",
+        f"security_mode={security_mode or '<none>'}",
+    ]
 
 
 def _run_coro_sync(coro: Coroutine[object, object, tuple[bool, str]]) -> tuple[bool, str]:
@@ -135,29 +165,72 @@ async def test_connection_preview(
     payload: MachineCreate,
     _: str = Depends(get_current_user),
 ) -> ConnectionTestResponse:
+    attempt_id = uuid4().hex[:8]
+    opc_service = get_opc_service()
+    settings = opc_service.settings
+    debug_log = _connection_test_debug_log(
+        attempt_id=attempt_id,
+        machine_code=(payload.machine_code or "").strip() or "<auto>",
+        endpoint=payload.opc_endpoint,
+        ip_address=payload.ip_address,
+        port=payload.port,
+        opc_username=payload.opc_username,
+        security_policy=payload.security_policy,
+        security_mode=payload.security_mode,
+        use_mock_opc=settings.use_mock_opc,
+        password_present=bool(payload.opc_password and payload.opc_password.strip()),
+        credential_source="request",
+    )
     logger.info(
-        "machine_test_preview_received machine_code=%s display_name=%s endpoint=%s username_present=%s",
+        "machine_test_preview_received attempt_id=%s machine_code=%s display_name=%s endpoint=%s ip_address=%s port=%s username=%s password_present=%s security_policy=%s security_mode=%s use_mock_opc=%s",
+        attempt_id,
         (payload.machine_code or "").strip() or "<auto>",
         payload.display_name,
         payload.opc_endpoint,
-        bool(payload.opc_username),
+        payload.ip_address,
+        payload.port,
+        payload.opc_username or "<blank>",
+        bool(payload.opc_password and payload.opc_password.strip()),
+        payload.security_policy or "<none>",
+        payload.security_mode or "<none>",
+        settings.use_mock_opc,
     )
+    logger.info("machine_test_preview_context attempt_id=%s %s", attempt_id, " | ".join(debug_log))
     machine = build_machine_from_payload(payload)
     logger.info(
-        "machine_test_preview_step=opc_test_start machine_code=%s endpoint=%s",
+        "machine_test_preview_step=opc_test_start attempt_id=%s machine_code=%s endpoint=%s",
+        attempt_id,
         machine.machine_code,
         machine.opc_endpoint,
     )
-    success, message = await get_opc_service().test_connection(machine)
+    try:
+        success, message = await opc_service.test_connection(machine)
+    except ValueError as exc:
+        logger.warning(
+            "machine_test_existing_step=opc_test_invalid_secret attempt_id=%s machine_id=%s machine_code=%s error=%s",
+            attempt_id,
+            machine.machine_id,
+            machine.machine_code,
+            exc,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Stored OPC credentials could not be decrypted. "
+                "Re-enter the OPC password for this machine after changing PASSWORD_ENCRYPTION_KEY."
+            ),
+        ) from exc
     if success:
         logger.info(
-            "machine_test_preview_step=opc_test_success machine_code=%s endpoint=%s",
+            "machine_test_preview_step=opc_test_success attempt_id=%s machine_code=%s endpoint=%s",
+            attempt_id,
             machine.machine_code,
             machine.opc_endpoint,
         )
     else:
         logger.warning(
-            "machine_test_preview_step=opc_test_failed machine_code=%s endpoint=%s error=%s",
+            "machine_test_preview_step=opc_test_failed attempt_id=%s machine_code=%s endpoint=%s error=%s",
+            attempt_id,
             machine.machine_code,
             machine.opc_endpoint,
             message,
@@ -166,6 +239,8 @@ async def test_connection_preview(
         success=success,
         message=message,
         machine_status="connection_tested" if success else "error",
+        attempt_id=attempt_id,
+        debug_log=debug_log,
     )
 
 
@@ -226,32 +301,95 @@ def disable_machine(machine_id: int, db: Session = Depends(get_db), user: str = 
     return MachineSummary.model_validate({**updated.__dict__, "tag_count": 0, "online_status": "unknown"})
 
 
+@router.delete("/{machine_id}")
+def delete_machine(machine_id: int, db: Session = Depends(get_db), user: str = Depends(get_current_user)) -> dict[str, int | str]:
+    machine = db.get(Machine, machine_id)
+    if machine is None:
+        raise HTTPException(status_code=404, detail="Machine not found")
+
+    tag_ids = [row[0] for row in db.execute(select(TagDefinition.tag_id).where(TagDefinition.machine_id == machine_id)).all()]
+    db.execute(delete(TagBrowserCache).where(TagBrowserCache.machine_id == machine_id))
+    db.execute(delete(TagCollectionStatus).where(TagCollectionStatus.machine_id == machine_id))
+    if tag_ids:
+        db.execute(delete(TagDefinition).where(TagDefinition.machine_id == machine_id))
+    db.execute(delete(MachineCollectionStatus).where(MachineCollectionStatus.machine_id == machine_id))
+    db.add(
+        ConfigAuditLog(
+            changed_by=user,
+            entity_type="machine",
+            entity_id=str(machine_id),
+            action="delete",
+            old_value_json={
+                "machine_code": machine.machine_code,
+                "display_name": machine.display_name,
+                "ip_address": machine.ip_address,
+                "opc_endpoint": machine.opc_endpoint,
+            },
+        )
+    )
+    db.delete(machine)
+    db.commit()
+    return {"deleted": 1, "machine_id": machine_id, "tag_count": len(tag_ids)}
+
+
 @router.post("/{machine_id}/test-connection", response_model=ConnectionTestResponse)
 async def test_connection(machine_id: int, db: Session = Depends(get_db), _: str = Depends(get_current_user)) -> ConnectionTestResponse:
     machine = db.get(Machine, machine_id)
     if machine is None:
         raise HTTPException(status_code=404, detail="Machine not found")
+    attempt_id = uuid4().hex[:8]
+    opc_service = get_opc_service()
+    settings = opc_service.settings
+    debug_log = _connection_test_debug_log(
+        attempt_id=attempt_id,
+        machine_code=machine.machine_code,
+        endpoint=machine.opc_endpoint,
+        ip_address=machine.ip_address,
+        port=machine.port,
+        opc_username=machine.opc_username,
+        security_policy=machine.security_policy,
+        security_mode=machine.security_mode,
+        use_mock_opc=settings.use_mock_opc,
+        password_present=bool(machine.opc_password_encrypted),
+        credential_source="stored",
+    )
     logger.info(
-        "machine_test_existing_received machine_id=%s machine_code=%s endpoint=%s",
+        "machine_test_existing_received attempt_id=%s machine_id=%s machine_code=%s endpoint=%s ip_address=%s port=%s username=%s stored_password_present=%s security_policy=%s security_mode=%s use_mock_opc=%s",
+        attempt_id,
         machine.machine_id,
         machine.machine_code,
         machine.opc_endpoint,
+        machine.ip_address,
+        machine.port,
+        machine.opc_username or "<blank>",
+        bool(machine.opc_password_encrypted),
+        machine.security_policy or "<none>",
+        machine.security_mode or "<none>",
+        settings.use_mock_opc,
     )
-    logger.info("machine_test_existing_step=opc_test_start machine_id=%s machine_code=%s", machine.machine_id, machine.machine_code)
-    success, message = await get_opc_service().test_connection(machine)
+    logger.info("machine_test_existing_context attempt_id=%s %s", attempt_id, " | ".join(debug_log))
+    logger.info(
+        "machine_test_existing_step=opc_test_start attempt_id=%s machine_id=%s machine_code=%s",
+        attempt_id,
+        machine.machine_id,
+        machine.machine_code,
+    )
+    success, message = await opc_service.test_connection(machine)
     machine.status = "connection_tested" if success else "error"
     machine.updated_at = datetime.now(UTC)
     db.commit()
     if success:
         logger.info(
-            "machine_test_existing_step=opc_test_success machine_id=%s machine_code=%s status=%s",
+            "machine_test_existing_step=opc_test_success attempt_id=%s machine_id=%s machine_code=%s status=%s",
+            attempt_id,
             machine.machine_id,
             machine.machine_code,
             machine.status,
         )
     else:
         logger.warning(
-            "machine_test_existing_step=opc_test_failed machine_id=%s machine_code=%s error=%s",
+            "machine_test_existing_step=opc_test_failed attempt_id=%s machine_id=%s machine_code=%s error=%s",
+            attempt_id,
             machine.machine_id,
             machine.machine_code,
             message,
@@ -260,6 +398,8 @@ async def test_connection(machine_id: int, db: Session = Depends(get_db), _: str
         success=success,
         message=message,
         machine_status=machine.status,
+        attempt_id=attempt_id,
+        debug_log=debug_log,
     )
 
 
@@ -274,13 +414,23 @@ async def browse_tags(
     if machine is None:
         raise HTTPException(status_code=404, detail="Machine not found")
     opc = get_opc_service()
-    nodes = await opc.browse_tags(
-        machine,
-        payload.max_depth or 6,
-        payload.max_nodes or 5000,
-        payload.root_node_id,
-        payload.root_label,
-    )
+    try:
+        nodes = await opc.browse_tags(
+            machine,
+            payload.max_depth or 6,
+            payload.max_nodes or 5000,
+            payload.root_node_id,
+            payload.root_label,
+        )
+    except Exception as exc:
+        logger.exception(
+            "machine_browse_failed machine_id=%s machine_code=%s root_node_id=%s root_label=%s",
+            machine_id,
+            machine.machine_code,
+            payload.root_node_id,
+            payload.root_label,
+        )
+        raise HTTPException(status_code=400, detail=f"Browse failed: {exc}") from exc
     tag_nodes = {
         row[0]
         for row in db.execute(select(TagDefinition.opc_node_id).where(TagDefinition.machine_id == machine_id)).all()

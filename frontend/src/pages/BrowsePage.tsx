@@ -26,6 +26,12 @@ type DiscoverRequest = {
   browsePath: string | null;
 };
 
+type HealthzResponse = {
+  status: string;
+  app_env?: string;
+  use_mock_opc?: boolean;
+};
+
 const ROOT_TRAIL_ITEM: BrowseTrailItem = {
   nodeId: null,
   label: "Root / Objects",
@@ -39,7 +45,13 @@ function getFolderLabel(item: BrowseCacheItem): string {
 export function BrowsePage(): JSX.Element {
   const { machineId } = useParams();
   const queryClient = useQueryClient();
-  const storageKey = machineId ? `opc-platform:browse-trail:${machineId}` : null;
+  const healthQuery = useQuery({
+    queryKey: ["healthz"],
+    queryFn: () => apiFetch<HealthzResponse>("/api/healthz"),
+  });
+  const browseMode =
+    healthQuery.data?.use_mock_opc === true ? "mock" : healthQuery.data?.use_mock_opc === false ? "real" : null;
+  const storageKey = machineId && browseMode ? `opc-platform:browse-trail:${machineId}:${browseMode}` : null;
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -49,12 +61,16 @@ export function BrowsePage(): JSX.Element {
   const [operationState, setOperationState] = useState<BrowseOperationState>("idle");
   const [operationStep, setOperationStep] = useState<BrowseStep>(0);
   const [operationMessage, setOperationMessage] = useState("");
+  const [connectionTestState, setConnectionTestState] = useState<BrowseOperationState>("idle");
+  const [connectionTestMessage, setConnectionTestMessage] = useState("");
+  const [connectionTestAttemptId, setConnectionTestAttemptId] = useState<string | null>(null);
   const initialAutoLoadDoneRef = useRef(false);
 
   const currentRoot = trail[trail.length - 1] ?? ROOT_TRAIL_ITEM;
   const currentFolderPath = currentRoot.browsePath;
 
   useEffect(() => {
+    setTrail([ROOT_TRAIL_ITEM]);
     if (!storageKey) {
       return;
     }
@@ -101,6 +117,31 @@ export function BrowsePage(): JSX.Element {
   const browseQuery = useQuery({
     queryKey: ["browse-cache", machineId, queryString],
     queryFn: () => apiFetch<PaginatedResponse<BrowseCacheItem>>(`/api/machines/${machineId}/browse-cache?${queryString}`),
+  });
+
+  const connectionTestMutation = useMutation({
+    mutationFn: () =>
+      apiFetch<{ success: boolean; message: string; attempt_id?: string | null }>(`/api/machines/${machineId}/test-connection`, {
+        method: "POST",
+      }),
+    onMutate: () => {
+      setConnectionTestState("running");
+      setConnectionTestMessage("Checking the machine connection...");
+      setConnectionTestAttemptId(null);
+      setActionError(null);
+    },
+    onSuccess: (result) => {
+      setConnectionTestState(result.success ? "success" : "error");
+      setConnectionTestMessage(result.message);
+      setConnectionTestAttemptId(result.attempt_id ?? null);
+      setActionError(null);
+    },
+    onError: (error) => {
+      setConnectionTestState("error");
+      setConnectionTestMessage((error as Error).message || "Connection test failed.");
+      setConnectionTestAttemptId(null);
+      setActionError((error as Error).message || "Connection test failed.");
+    },
   });
 
   const discoveredFolders = useMemo(() => {
@@ -303,7 +344,16 @@ export function BrowsePage(): JSX.Element {
         </div>
         <div className="browse-discovery-actions">
           <button
+            className="ghost-button browse-test-button"
+            onClick={() => connectionTestMutation.mutate()}
+            disabled={connectionTestMutation.isPending}
+            type="button"
+          >
+            {connectionTestMutation.isPending ? "Testing..." : "Test Connection"}
+          </button>
+          <button
             className="primary-button browse-discover-button"
+            type="button"
             onClick={() =>
               discoverMutation.mutate({
                 nodeId: currentRoot.nodeId,
@@ -320,6 +370,38 @@ export function BrowsePage(): JSX.Element {
           </div>
         </div>
       </div>
+
+      {connectionTestState !== "idle" ? (
+        <div className={`browse-result-banner browse-result-banner-${connectionTestState}`}>
+          <div className="browse-result-text">
+            {connectionTestMessage}
+            {connectionTestAttemptId ? ` (attempt ${connectionTestAttemptId})` : null}
+          </div>
+          <div className="browse-result-actions">
+            {connectionTestState === "error" ? (
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => connectionTestMutation.mutate()}
+                disabled={connectionTestMutation.isPending}
+              >
+                Try Again
+              </button>
+            ) : null}
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => {
+                setConnectionTestState("idle");
+                setConnectionTestMessage("");
+                setConnectionTestAttemptId(null);
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="panel machine-guide">
         <div className="guide-card">
